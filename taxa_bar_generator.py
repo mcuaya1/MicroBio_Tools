@@ -52,8 +52,10 @@ qiime taxa barplot --i-table treatment_filtered.qza --m-metadata-file treatment_
 parser = argparse.ArgumentParser(add_help=False, prog="filter_data.py", description="Program to filter qzv data")
 
 parser.add_argument('-i',"--input-file", required=True, help="CSV file needed containing data to filter",type=str)
+parser.add_argument('-p', "--plot-title", help="Tilte for plot",type=str)
 parser.add_argument('-n', "--top-n-taxa", required=True, help="Filter for top N taxa",type=int)
 parser.add_argument('-f', "--filter", action="store_true", help="Filter out any taxa(Default is viruses)")
+parser.add_argument('-t', "--data-type", required=True, help="Type of sequence data program will be working with\nf = Fungal\nb=Bacteria", type=str)
 parser.add_argument('-l', "--listing", nargs='+', type=str, help="Set a preferred listing for x axis (Default is whatever is listed in the CSV file)")
 parser.add_argument('-d', "--output-dir", required=True, help="Output directory location",type=str)
 parser.add_argument('-h', '--help', action='help', default=argparse.SUPPRESS, help='Display commands possible with this program.')
@@ -63,6 +65,8 @@ data_file=args.input_file
 n=args.top_n_taxa
 index_listing=args.listing
 output=args.output_dir
+seq_type=args.data_type
+title=args.plot_title
 
 df = pd.read_csv(data_file,index_col=False)
 
@@ -110,19 +114,7 @@ if args.filter == True:
                 break
 else:
     print('No filtering')
-
-time_generated=datetime.now().strftime("%d/%m/%y %H:%M:%S")
-with open(f'{output}/top_n_stats.txt', "w") as f:
-    print(f"==========================================",file=f)
-    print(f"Top_N_Stats", file=f)
-    print(f"==========================================",file=f)
-    print(f"Date file was generated:{time_generated}\n",file=f)
-    print(top_n,file=f)
-    print(f"==========================================",file=f)
-    print('Taxa filtered out',file=f)
-    print(taxa_removed,file=f)
     
-
 print("=================================")
 print("Creating Other DF")
 print("=================================")
@@ -159,7 +151,6 @@ print("=================================")
 #Merging df containing taxas grouped under other
 #and top N taxa
 combined_df=pd.merge(top_taxa_df,other_df, left_index=True, right_index=True)
-print(combined_df)
 #Caluclating the total of each row
 total=combined_df[combined_df.columns].sum(axis=1)
 
@@ -174,6 +165,32 @@ headers = combined_df.columns[:len(combined_df.columns)-1].tolist()
 #Extracting header columns while ignoring the 'Other' column
 headers = combined_df.columns[:len(combined_df.columns)-1].tolist()
 
+
+#Pulling out stats and reogrinizing them to be printed to stats file
+data_stats = combined_df.T
+data_stats_index = data_stats.index.to_list()
+data_stats_index = data_stats_index[:len(data_stats_index)-1]
+data_stats_index.reverse()
+data_stats_index.append('Other')
+data_stats=data_stats.reindex(data_stats_index)
+
+time_generated=datetime.now().strftime("%d/%m/%y %H:%M:%S")
+with open(f'{output}/top_n_stats.txt', "w") as f:
+    print(f"==========================================",file=f)
+    print(f"Top_N_Stats", file=f)
+    print("To find further sequence specific information, refer to table 03 generated previously.", file=f)
+    print("Please refer to the excel file generated to perform further analysis.", file=f)
+    print(f"==========================================",file=f)
+    print(f"Date file was generated:{time_generated}\n",file=f)
+    print(data_stats.to_markdown(),file=f)
+    print(f"\n==========================================",file=f)
+    print('Taxa filtered out',file=f)
+    print(taxa_removed,file=f)
+
+#Saving to excel
+data_stats.to_excel(f'{output}/top_n_stats.xlsx')
+
+
 #Formatting column headers
 for i in range(len(top_n_columns)):
     if 'g_' not in top_n_columns[i]:
@@ -182,8 +199,26 @@ for i in range(len(top_n_columns)):
             for j in range(len(list)):
                 if 'f__' in list[j]:
                     top_n_columns[i] = list[j]
+        elif 'o_' in top_n_columns[i]:
+            list = top_n_columns[i].split(';')
+            for j in range(len(list)):
+                if 'o__' in list[j]:
+                    top_n_columns[i] = list[j]
+        elif 'c_' in top_n_columns[i]:
+            list = top_n_columns[i].split(';')
+            for j in range(len(list)):
+                if 'c__' in list[j]:
+                    top_n_columns[i] = list[j]
+        elif 'p_' in top_n_columns[i]:
+            list = top_n_columns[i].split(';')
+            for j in range(len(list)):
+                if 'p__' in list[j]:
+                    top_n_columns[i] = list[j]
         else:
-            top_n_columns[i] = 'Unknown Bacteria'
+            if seq_type == 'b':
+                top_n_columns[i] = 'Bacterial ASV'
+            elif seq_type == 'f':
+                top_n_columns[i] = 'Fungal ASV'
     else:
         top_n_columns[i] = top_n_columns[i].split(';')[-1]
 
@@ -219,5 +254,12 @@ ax.legend(handles, labels, bbox_to_anchor=(1, 1), frameon=False, title="Genus", 
 #https://stackoverflow.com/questions/12402561/how-to-set-font-size-of-matplotlib-axis-legend
 plt.setp(plt.gca().get_legend().get_texts(), fontsize='15')
 plt.setp(plt.gca().get_legend().get_title(),fontsize='20')
+
+#https://matplotlib.org/stable/gallery/text_labels_and_annotations/titles_demo.html
+ax.set_title(title,fontsize='20')
+
+#https://stackoverflow.com/questions/14908576/how-to-remove-frame-from-a-figure
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
 plt.tight_layout()
 plt.savefig(f'{output}/Taxa_barplot.png')
