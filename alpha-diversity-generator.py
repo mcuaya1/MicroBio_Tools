@@ -7,6 +7,10 @@ from qiime2 import Metadata
 from qiime2 import Artifact
 import matplotlib.pyplot as plt
 
+#Further resources can be found at the following links below:
+#https://develop.qiime2.org/en/latest/intro.html
+#https://docs.qiime2.org/2024.5/plugins/
+
 parser = argparse.ArgumentParser(add_help=False, prog="alpha-diversity-genator.py", description="Program to generate custom alpha diversity boxplots")
 
 parser.add_argument('-i',"--input-file", required=True, help="Imported feature table",type=str)
@@ -39,28 +43,25 @@ alpha_diversity_table = alpha_results.alpha_diversity
 
 #Turn the data into a pandas data frame for further parsing
 alpha_diversity_table = pd.DataFrame(alpha_diversity_table.view(pd.Series))
-#Extract ids and turn dataframe to dictoniary for further parsing
+#Extract ids and turn the dataframe to dictoniary for further parsing.
+#This part could probably be done better, as I don't think you need to pull this information out from the data frame.
 id_list=alpha_diversity_table.index.to_list()
 id_dict=alpha_diversity_table.to_dict()
-#Get the data assiocated with the column to parse
+#Get the data associated with the column to parse
+#https://develop.qiime2.org/en/latest/plugins/references/metadata-api.html
 colum = map_file.get_column(f"{data_column}")
 
-stats_dict={}
 data_dict={}
 
-#Loop through the list and get a id's meta tag from column
-#and assign its shannon index value to a dictonary where the key
-#is the id's meta tag and its value a list containg all id's shannon index assoicated with
-#the meta tag
+#Loop through the list and get the sample's meta tag from the column
+#and assign its Shannon index value to a dictionary where the key is the sample's meta tag and its value 
+# is a list containg all the samples associated with this meta tag and their Shannon index score
 for i in range(len(id_list)):
     if(colum.get_value(id_list[i]) not in data_dict):
-        stats_dict[colum.get_value(id_list[i])] = []
         data_dict[colum.get_value(id_list[i])] = []
         data_dict[colum.get_value(id_list[i])].append(id_dict['shannon_entropy'][id_list[i]])
-        stats_dict[colum.get_value(id_list[i])].append((id_list[i], id_dict['shannon_entropy'][id_list[i]]))
     else:
         data_dict[colum.get_value(id_list[i])].append(id_dict['shannon_entropy'][id_list[i]])
-        stats_dict[colum.get_value(id_list[i])].append((id_list[i], id_dict['shannon_entropy'][id_list[i]]))
 
 fig, ax = plt.subplots(figsize = (15, 10))
 medianprops = dict(linestyle='-.', linewidth=3, color='black')
@@ -75,7 +76,7 @@ plt.boxplot(data_dict.values(), labels=data_dict.keys(),
 plt.xticks(rotation=90,fontsize='13')
 plt.yticks(fontsize='13')
 
-#Old code to possible assign different colors to each boxplot
+#Old code to possiblly assign different colors to each boxplot
 #ax.boxplot(data_dict['T1Tm0_CAR'],labels=['T1Tm0_CAR'], patch_artist=True)
 #ax.boxplot(data_dict['T2Tm0_CAR'],labels=['T2Tm0_CAR'])
 
@@ -92,7 +93,6 @@ fig.savefig(f"{output}Alpha_diversity.png")
 #Sort data for stats extraction
 alpha_diversity_table = alpha_diversity_table.sort_values('shannon_entropy', ascending=False)
 alpha_diversity_table = alpha_diversity_table.sort_values('shannon_entropy', ascending=False)
-
 #Extract ids and turn dataframe to dictoniary for further parsing
 id_list=alpha_diversity_table.index.to_list()
 id_dict=alpha_diversity_table.to_dict()
@@ -101,18 +101,16 @@ id_dict=alpha_diversity_table.to_dict()
 colum = map_file.get_column(f"{data_column}")
 
 stats_dict={}
-data_dict={}
+
+#Does the same thing as the previous for loop but formats data in a way to be viewed by a user easily.
 for i in range(len(id_list)):
-    if(colum.get_value(id_list[i]) not in data_dict):
+    if(colum.get_value(id_list[i]) not in stats_dict):
         stats_dict[colum.get_value(id_list[i])] = []
-        data_dict[colum.get_value(id_list[i])] = []
-        data_dict[colum.get_value(id_list[i])].append(id_dict['shannon_entropy'][id_list[i]])
         stats_dict[colum.get_value(id_list[i])].append((id_list[i], id_dict['shannon_entropy'][id_list[i]]))
     else:
-        data_dict[colum.get_value(id_list[i])].append(id_dict['shannon_entropy'][id_list[i]])
         stats_dict[colum.get_value(id_list[i])].append((id_list[i], id_dict['shannon_entropy'][id_list[i]]))
 
-#Get the amount of samples in a treatment
+#Get the amount of samples in a meta group
 length_of_samples = []
 for key, value in stats_dict.items():
   length_of_samples.append(len(value))
@@ -124,7 +122,7 @@ alpha_diversity_stats.drop('Sample Tag', axis=1, inplace=True)
 
 #Outputting stats
 time_generated=datetime.now().strftime("%d/%m/%y %H:%M:%S")
-with open(f'{output}/alpha_diversity_stats.txt', "w") as f:
+with open(f'{output}alpha_diversity_stats.txt', "w") as f:
     print(f"==========================================",file=f)
     print(f"Alpha_Diversity_Stats", file=f)
     print("To find further sequence specific information, refer to table 03 generated previously.", file=f)
@@ -134,5 +132,6 @@ with open(f'{output}/alpha_diversity_stats.txt', "w") as f:
     print(alpha_diversity_stats.to_markdown(),file=f)
     print(f"\n==========================================",file=f)
 
+#Saving them to an execel file
 alpha_diversity_stats.to_excel(f'{output}alpha_diversity_stats.xlsx')
 
