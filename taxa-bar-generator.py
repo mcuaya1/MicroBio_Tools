@@ -221,7 +221,7 @@ for i in range(len(top_n_columns)):
             elif seq_type == 'f':
                 top_n_columns[i] = 'Fungal ASV'
     else:
-        top_n_columns[i] = top_n_columns[i].split(';')[-1]
+        top_n_columns[i] = top_n_columns[i].split(';')[-1].split('_')[-1]
 
 
 #Generating Barplot
