@@ -5,6 +5,7 @@ from datetime import datetime
 from qiime2 import Artifact
 from qiime2 import Metadata
 from qiime2.plugins import feature_table
+from qiime2.plugins.taxa.visualizers import barplot
 import numpy as np 
 import os
 
@@ -63,6 +64,12 @@ colum = map_file.get_column(f"{data_column}")
 #https://docs.qiime2.org/2024.5/plugins/available/feature-table/group/
 asv_table_grouped_results = feature_table.methods.group(table=asv_table_filtered, axis='sample', metadata=colum, mode='sum')
 asv_table_grouped = asv_table_grouped_results.grouped_table
+
+#Creating qiime2 visualization file
+print("Generating raw data as a qiime 2 qzv file...")
+asv_table_grouped_qzv = barplot(table=asv_table_grouped)
+asv_table_grouped_qzv = asv_table_grouped_qzv.visualization
+asv_table_grouped_qzv.save(f"{output}Taxa_barplot_qiime")
 
 
 #Take the grouped ASV table and convert it to a pandas Data Frame
@@ -161,10 +168,8 @@ data_columns=combined_df.columns.tolist()
 combined_df[data_columns]=combined_df[data_columns].div(total,axis=0)
 combined_df[data_columns]=combined_df[data_columns].multiply(100,axis=0)
 headers = combined_df.columns[:len(combined_df.columns)-1].tolist()
-
 #Extracting header columns while ignoring the 'Other' column
 headers = combined_df.columns[:len(combined_df.columns)-1].tolist()
-
 
 #Pulling out stats and reogrinizing them to be printed to stats file
 data_stats = combined_df.T
