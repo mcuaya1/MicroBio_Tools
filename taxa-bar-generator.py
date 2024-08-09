@@ -114,13 +114,13 @@ if args.filter == True:
                 counter+=1
             else:
                 print('Found new taxa to replace previous')
-                taxa_removed.append(top_n_columns[i])
+                taxa_removed.append((top_n_columns[i],i+1))
                 new_top_n.remove(top_n_columns[i])
                 top_n_columns=new_top_n
                 break
 else:
     print('No filtering')
-    
+
 print("=================================")
 print("Creating Other DF")
 print("=================================")
@@ -181,18 +181,21 @@ data_stats=data_stats.reindex(data_stats_index)
 
 time_generated=datetime.now().strftime("%d/%m/%y %H:%M:%S")
 with open(f'{output}top_n_stats.md', "w") as f:
-    print(f"# Top_N_Stats", file=f)
+    print(f"# Top N Stats", file=f)
     print("## To find further sequence specific information, refer to table 03 generated previously.", file=f)
     print("**Please refer to the excel file generated to perform further analysis.**", file=f)
-    print(f"<br>Date file was generated:{time_generated}\n",file=f)
+    print(f"<br>Date file was generated: {time_generated}\n",file=f)
     print(data_stats.to_markdown(),file=f)
-    print(f"<br>",file=f)
-    print('Taxa filtered out: ', end='',file=f)
+    print("\n<br>",file=f)
+    print('Taxa filtered out: \n',file=f)
     if(args.filter == True):
         if (len(taxa_removed) == 0):
             print('N/A',file=f)
         else:
-            print(taxa_removed, file=f)
+            for i in range(len(taxa_removed)):
+                taxa_filtered=df[taxa_removed[i][0]].to_frame().div(total,axis=0).multiply(100,axis=0).T
+                taxa_filtered["Previous position"]=taxa_removed[i][1]
+                print(taxa_filtered.to_markdown(), file=f)
 
 #Saving to excel
 data_stats.to_excel(f'{output}top_n_stats.xlsx')
@@ -239,7 +242,7 @@ cmap = plt.get_cmap('tab20')
 colors = [cmap(i) for i in np.linspace(0, 1, len(headers))]
 
 #Plot the "Other" column first.
-ax.bar(combined_df.index, combined_df["Other"], bottom=0, width=0.9, color='black', alpha=0.8, label='Other')
+ax.bar(combined_df.index, combined_df["Other"], bottom=0, width=0.9, color='black', alpha=0.77, label='Other')
 current = combined_df['Other']
 
 #Plotting each column from the combined_df into the barplot by looping through
