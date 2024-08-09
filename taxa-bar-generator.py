@@ -180,18 +180,19 @@ data_stats_index.append('Other')
 data_stats=data_stats.reindex(data_stats_index)
 
 time_generated=datetime.now().strftime("%d/%m/%y %H:%M:%S")
-with open(f'{output}top_n_stats.txt', "w") as f:
-    print(f"==========================================",file=f)
-    print(f"Top_N_Stats", file=f)
-    print("To find further sequence specific information, refer to table 03 generated previously.", file=f)
-    print("Please refer to the excel file generated to perform further analysis.", file=f)
-    print(f"==========================================",file=f)
-    print(f"Date file was generated:{time_generated}\n",file=f)
+with open(f'{output}top_n_stats.md', "w") as f:
+    print(f"# Top_N_Stats", file=f)
+    print("## To find further sequence specific information, refer to table 03 generated previously.", file=f)
+    print("**Please refer to the excel file generated to perform further analysis.**", file=f)
+    print(f"<br>Date file was generated:{time_generated}\n",file=f)
     print(data_stats.to_markdown(),file=f)
-    print(f"\n==========================================",file=f)
-    print('Taxa filtered out',file=f)
+    print(f"<br>",file=f)
+    print('Taxa filtered out: ', end='',file=f)
     if(args.filter == True):
-        print(taxa_removed,file=f)
+        if (len(taxa_removed) == 0):
+            print('N/A',file=f)
+        else:
+            print(taxa_removed, file=f)
 
 #Saving to excel
 data_stats.to_excel(f'{output}top_n_stats.xlsx')
