@@ -6,6 +6,7 @@ from qiime2 import Artifact
 from qiime2 import Metadata
 from qiime2.plugins import feature_table
 import numpy as np 
+import os
 
 #Further resources can be found at the following links below:
 #https://develop.qiime2.org/en/latest/intro.html
@@ -29,10 +30,13 @@ map_file=args.map_file
 data_column=args.column
 n=args.top_n_taxa
 index_listing=args.listing
-output=args.output_dir
+output=os.path.join(args.output_dir,"taxanomic-output/")
 seq_type=args.data_type
 title=args.plot_title
 
+if not os.path.exists(output):
+    os.mkdir(output)
+print(f"Output directory: {output}")
 
 #Load in the map file and artifact file. 
 #This is all specific to qiime2, and in order to work with the qiime2 API, these needed to be loaded in
