@@ -20,7 +20,7 @@ parser.add_argument('-n', "--top-n-taxa", required=True, help="Filter for top N 
 parser.add_argument('-f', "--filter", action="store_true", help="Filter out any taxa (Default is viruses)")
 parser.add_argument('-t', "--data-type", required=True, help="Type of sequence data program will be working with\nf = Fungal\nb=Bacteria", type=str)
 parser.add_argument('-l', "--listing", nargs='+', type=str, help="Set a preferred listing for x axis (Default is nothing)")
-parser.add_argument('-d', "--output-dir", required=True, hselp="Output directory location",type=str)
+parser.add_argument('-d', "--output-dir", required=True, help="Output directory location",type=str)
 parser.add_argument('-h', '--help', action='help', default=argparse.SUPPRESS, help='Display commands possible with this program.')
 args = parser.parse_args()
 
