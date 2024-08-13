@@ -103,9 +103,9 @@ top_n_columns = top_n.index.tolist()
 #If the next tax in the top N list isn't a wanted tax, then it should keep looping until it finds
 #one. It should do this for as many unwanted taxa present as possible, though I haven't encountered a situation like this, so 
 #I haven't finalized the logic to address such a situation. The logic in theory seems simple enough to implement; I just need to get around to doing so.
+taxa_removed =[]
 if args.filter == True:
     counter=1
-    taxa_removed =[]
     for i in range(len(top_n_columns)):
         if 'k__Virus' in top_n_columns[i]:
             print('Top N contains an unwanted taxa')

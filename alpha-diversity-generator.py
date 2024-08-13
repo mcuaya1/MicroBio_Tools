@@ -6,6 +6,8 @@ from qiime2.plugins import diversity
 from qiime2 import Metadata
 from qiime2 import Artifact
 import matplotlib.pyplot as plt
+from qiime2.plugins.diversity.visualizers import alpha_group_significance
+import os
 
 #Further resources can be found at the following links below:
 #https://develop.qiime2.org/en/latest/intro.html
@@ -27,22 +29,40 @@ map_file=args.map_file
 data_column=args.column
 plot_tilte=args.plot_title
 index_listing=args.listing
-output=args.output_dir
+output=os.path.join(args.output_dir, "alpha-output/")
+
+#Creating output directory
+if not os.path.exists(output):
+    os.mkdir(output)
+print(f"Output directory: {output}")
 
 #Load in ASV table and map file
 artifact = Artifact.load(data_file)
 map_file=Metadata.load(map_file)
 
+#Qiime2 alpha diversity file
+#alpha_results = diversity.pipelines.alpha(table=artifact, metric='shannon')
+#alpha_diversity_table = alpha_results.alpha_diversity
+#alpha_vis_file=alpha_group_significance(alpha_diversity=alpha_diversity_table, metadata=map_file)
+#alpha_vis_file = alpha_vis_file.visualization
+#alpha_vis_file.save(f"{output}Taxa_barplot_qiime")
+
 #Filter feature table to only contain samples with a tag in the given column
 asv_table_filtered= feature_table.methods.filter_samples(table=artifact, metadata=map_file, where=f"{data_column} NOT NULL")
 asv_table_filtered = asv_table_filtered.filtered_table
 
+debug_table = asv_table_filtered.view(pd.DataFrame)
+subset_df = debug_table.iloc[:10, :1]
+print(subset_df)
+print("======")
 #Run Shannon alpha diversity metric on the filtered table
 alpha_results = diversity.pipelines.alpha(table=asv_table_filtered, metric='shannon')
 alpha_diversity_table = alpha_results.alpha_diversity
 
 #Turn the data into a pandas data frame for further parsing
 alpha_diversity_table = pd.DataFrame(alpha_diversity_table.view(pd.Series))
+print(alpha_diversity_table.head(10))
+exit(0)
 #Extract ids and turn the dataframe to dictoniary for further parsing.
 #This part could probably be done better, as I don't think you need to pull this information out from the data frame.
 id_list=alpha_diversity_table.index.to_list()
