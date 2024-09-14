@@ -1,3 +1,4 @@
+#TODO: Finish script
 import argparse
 from datetime import datetime
 import pandas as pd
@@ -64,9 +65,7 @@ print(matrix)
 #print(beta_diversity_dm)
 
 beta_diversity_df = matrix.samples
-#print(beta_diversity_df)
 
-#exit(0)
 fig, ax = plt.subplots(figsize = (15, 10))
 values = beta_diversity_df.values
 plt.scatter(values[:,0], values[:,1])

@@ -51,84 +51,50 @@ map_file=Metadata.load(map_file)
 asv_table_filtered= feature_table.methods.filter_samples(table=artifact, metadata=map_file, where=f"{data_column} NOT NULL")
 asv_table_filtered = asv_table_filtered.filtered_table
 
-debug_table = asv_table_filtered.view(pd.DataFrame)
-subset_df = debug_table.iloc[:10, :1]
-print(subset_df)
-print("======")
+#For debugging purposes
+#debug_table = asv_table_filtered.view(pd.DataFrame)
+#subset_df = debug_table.iloc[:10, :1]
+#print(subset_df)
+#print("======")
+
 #Run Shannon alpha diversity metric on the filtered table
 alpha_results = diversity.pipelines.alpha(table=asv_table_filtered, metric='shannon')
 alpha_diversity_table = alpha_results.alpha_diversity
+alpha_vis_file=alpha_group_significance(alpha_diversity=alpha_diversity_table, metadata=map_file)
+alpha_vis_file = alpha_vis_file.visualization
+alpha_vis_file.save(f"{output}{data_column}")
 
 #Turn the data into a pandas data frame for further parsing
 alpha_diversity_table = pd.DataFrame(alpha_diversity_table.view(pd.Series))
-print(alpha_diversity_table.head(10))
-exit(0)
+alpha_diversity_table_sorted = alpha_diversity_table.sort_values('shannon_entropy', ascending=False)
 #Extract ids and turn the dataframe to dictoniary for further parsing.
 #This part could probably be done better, as I don't think you need to pull this information out from the data frame.
-id_list=alpha_diversity_table.index.to_list()
-id_dict=alpha_diversity_table.to_dict()
+sample_ids=alpha_diversity_table.index.to_list()
+sample_ids_sorted=alpha_diversity_table_sorted.index.to_list()
+shannon_score=alpha_diversity_table.to_dict()
 #Get the data associated with the column to parse
 #https://develop.qiime2.org/en/latest/plugins/references/metadata-api.html
 colum = map_file.get_column(f"{data_column}")
 
 data_dict={}
-
+stats_dict={}
 #Loop through the list and get the sample's meta tag from the column
 #and assign its Shannon index value to a dictionary where the key is the sample's meta tag and its value 
 # is a list containg all the samples associated with this meta tag and their Shannon index score
-for i in range(len(id_list)):
-    if(colum.get_value(id_list[i]) not in data_dict):
-        data_dict[colum.get_value(id_list[i])] = []
-        data_dict[colum.get_value(id_list[i])].append(id_dict['shannon_entropy'][id_list[i]])
+for i in range(len(sample_ids)):
+    if(colum.get_value(sample_ids[i]) not in data_dict):
+        data_dict[colum.get_value(sample_ids[i])] = []
+        data_dict[colum.get_value(sample_ids[i])].append(shannon_score['shannon_entropy'][sample_ids[i]])
     else:
-        data_dict[colum.get_value(id_list[i])].append(id_dict['shannon_entropy'][id_list[i]])
+        data_dict[colum.get_value(sample_ids[i])].append(shannon_score['shannon_entropy'][sample_ids[i]])
 
-fig, ax = plt.subplots(figsize = (15, 10))
-medianprops = dict(linestyle='-.', linewidth=3, color='black')
-flierprops = dict(marker='o', markerfacecolor='blue', markersize=7,markeredgecolor='none')
-boxprops = dict(facecolor='gray')
-
-plt.boxplot(data_dict.values(), labels=data_dict.keys(), 
-            patch_artist=True, 
-            boxprops=boxprops, medianprops=medianprops, flierprops=flierprops, 
-            widths=0.7)
-
-plt.xticks(rotation=90,fontsize='13')
-plt.yticks(fontsize='13')
-
-#Old code to possiblly assign different colors to each boxplot
-#ax.boxplot(data_dict['T1Tm0_CAR'],labels=['T1Tm0_CAR'], patch_artist=True)
-#ax.boxplot(data_dict['T2Tm0_CAR'],labels=['T2Tm0_CAR'])
-
-#https://stackoverflow.com/questions/52273543/creating-multiple-boxplots-on-the-same-graph-from-a-dictionary
-#https://matplotlib.org/stable/gallery/statistics/boxplot.html#sphx-glr-gallery-statistics-boxplot-py
-#https://stackoverflow.com/questions/32443803/adjust-width-of-box-in-boxplot-in-python-matplotlib
-plt.ylabel('Shannon Diversity', fontsize='15') 
-plt.title(f'{plot_tilte}', fontsize='20') 
-ax.spines['top'].set_visible(False)
-ax.spines['right'].set_visible(False)
-plt.tight_layout()
-fig.savefig(f"{output}Alpha_diversity.png")
-
-#Sort data for stats extraction
-alpha_diversity_table = alpha_diversity_table.sort_values('shannon_entropy', ascending=False)
-alpha_diversity_table = alpha_diversity_table.sort_values('shannon_entropy', ascending=False)
-#Extract ids and turn dataframe to dictoniary for further parsing
-id_list=alpha_diversity_table.index.to_list()
-id_dict=alpha_diversity_table.to_dict()
-
-#Get the data assiocated with the column to parse
-colum = map_file.get_column(f"{data_column}")
-
-stats_dict={}
-
-#Does the same thing as the previous for loop but formats data in a way to be viewed by a user easily.
-for i in range(len(id_list)):
-    if(colum.get_value(id_list[i]) not in stats_dict):
-        stats_dict[colum.get_value(id_list[i])] = []
-        stats_dict[colum.get_value(id_list[i])].append((id_list[i], id_dict['shannon_entropy'][id_list[i]]))
+    if (colum.get_value(sample_ids_sorted[i]) not in stats_dict):
+        stats_dict[colum.get_value(sample_ids_sorted[i])] = []
+        stats_dict[colum.get_value(sample_ids_sorted[i])].append((sample_ids_sorted[i],shannon_score['shannon_entropy'][sample_ids_sorted[i]]))
+        
     else:
-        stats_dict[colum.get_value(id_list[i])].append((id_list[i], id_dict['shannon_entropy'][id_list[i]]))
+        stats_dict[colum.get_value(sample_ids_sorted[i])].append((sample_ids_sorted[i],shannon_score['shannon_entropy'][sample_ids_sorted[i]]))
+
 
 #Get the amount of samples in a meta group
 length_of_samples = []
@@ -154,4 +120,33 @@ with open(f'{output}alpha_diversity_stats.txt', "w") as f:
 
 #Saving them to an execel file
 alpha_diversity_stats.to_excel(f'{output}alpha_diversity_stats.xlsx')
+
+
+cmap = plt.get_cmap('tab20')
+fig, ax = plt.subplots(figsize = (15, 10))
+medianprops = dict(linestyle='-', linewidth=1.5, color='black')
+flierprops = dict(marker='o', markerfacecolor='blue', markersize=7,markeredgecolor='none')
+boxprops = dict(facecolor=cmap(0.09))
+
+plt.boxplot(data_dict.values(), labels=data_dict.keys(), 
+            patch_artist=True, 
+            boxprops=boxprops, medianprops=medianprops, flierprops=flierprops, 
+            widths=0.7)
+
+plt.xticks(rotation=90,fontsize='13')
+plt.yticks(fontsize='13')
+
+#Old code to possiblly assign different colors to each boxplot
+#ax.boxplot(data_dict['T1Tm0_CAR'],labels=['T1Tm0_CAR'], patch_artist=True)
+#ax.boxplot(data_dict['T2Tm0_CAR'],labels=['T2Tm0_CAR'])
+
+#https://stackoverflow.com/questions/52273543/creating-multiple-boxplots-on-the-same-graph-from-a-dictionary
+#https://matplotlib.org/stable/gallery/statistics/boxplot.html#sphx-glr-gallery-statistics-boxplot-py
+#https://stackoverflow.com/questions/32443803/adjust-width-of-box-in-boxplot-in-python-matplotlib
+plt.ylabel('Shannon Diversity', fontsize='15') 
+plt.title(f'{plot_tilte}', fontsize='20') 
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+plt.tight_layout()
+fig.savefig(f"{output}{data_column}_alpha_plot.png")
 
