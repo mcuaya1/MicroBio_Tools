@@ -298,6 +298,7 @@ def biime_formatter(asv_table : Artifact, map_file : Metadata , col ,treatments,
     n = len(treatments)
     
     dataframe_list=[]
+    all_samples=asv_table.columns.to_list()
     for i in range(n):
         
         #Get the current treatment
@@ -306,7 +307,10 @@ def biime_formatter(asv_table : Artifact, map_file : Metadata , col ,treatments,
         #Extract the samples from map file that are labeled with the current treatement
         # *Uses qiime 2 Metdata function 'get_ids' to extract all samples from a treatment based on the map file 
         samples = list(map_file.get_ids(f"[{col}]='{current_treatment}'"))
-        
+        for i in samples:
+            if i not in all_samples:
+                print(f"{i} is not in the ASV table, please check raw counts file for this sequence run")
+                samples.remove(i)
         
         #Create a temp dataframe which only contains samples related to current treatment
         temp_df=asv_table[samples]
