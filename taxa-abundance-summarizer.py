@@ -276,7 +276,7 @@ def qiime_formatter(asv_table: Artifact, map_file: Metadata, data_column: str, o
     asv_table_grouped_qzv = asv_table_grouped_qzv.visualization
     asv_table_grouped_qzv.save(f"{output}{data_column}")
 
-def biime_formatter(asv_table : Artifact, map_file : Metadata , col ,treatments, num, outputdir, plot_title):
+def biime_formatter(asv_table : Artifact, map_file : Metadata , col ,treatments, num, outputdir, plot_title, split_replicates : bool, filter: bool):
     print('BIIME FORMATTER')
     pd.options.mode.chained_assignment = None
     
@@ -299,35 +299,58 @@ def biime_formatter(asv_table : Artifact, map_file : Metadata , col ,treatments,
     
     dataframe_list=[]
     all_samples=asv_table.columns.to_list()
-    for i in range(n):
-        
-        #Get the current treatment
-        current_treatment=treatments[i]
+    if split_replicates == False:
+        for i in range(n):
+            
+            #Get the current treatment
+            current_treatment=treatments[i]
 
-        #Extract the samples from map file that are labeled with the current treatement
-        # *Uses qiime 2 Metdata function 'get_ids' to extract all samples from a treatment based on the map file 
-        samples = list(map_file.get_ids(f"[{col}]='{current_treatment}'"))
-        for i in samples:
-            if i not in all_samples:
-                print(f"{i} is not in the ASV table, please check raw counts file for this sequence run")
-                samples.remove(i)
+            #Extract the samples from map file that are labeled with the current treatement
+            # *Uses qiime 2 Metdata function 'get_ids' to extract all samples from a treatment based on the map file 
+            samples = list(map_file.get_ids(f"[{col}]='{current_treatment}'"))
+            for i in samples:
+                if i not in all_samples:
+                    print(f"{i} is not in the ASV table, please check raw counts file for this sequence run")
+                    samples.remove(i)
+            
+            #Create a temp dataframe which only contains samples related to current treatment
+            temp_df=asv_table[samples]
+            
+            #Get each ASVs total abundance across all current samples
+            #*Create column in the temp dataframe with these values and label the column by the current treatment
+            temp_df[f'{current_treatment}'] = temp_df[temp_df.columns].sum(axis=1)
+            
+            #Remove samples from temp dataframe by extracting them from the data frame and dropping them
+            # *Ensures that 'treatment' column is the only one present
+            list_temp = temp_df.columns
+            list_temp = list_temp[0:len(list_temp)-1]
+            temp_df=temp_df.drop(columns=list_temp)
+            
+            
+            #Append treatment dataframe to a list of dataframes
+            dataframe_list.append(temp_df)
+    else:
+        print("\nSplit replicates")
         
-        #Create a temp dataframe which only contains samples related to current treatment
-        temp_df=asv_table[samples]
-        
-        #Get each ASVs total abundance across all current samples
-        #*Create column in the temp dataframe with these values and label the column by the current treatment
-        temp_df[f'{current_treatment}'] = temp_df[temp_df.columns].sum(axis=1)
-        
-        #Remove samples from temp dataframe by extracting them from the data frame and dropping them
-        # *Ensures that 'treatment' column is the only one present
-        list_temp = temp_df.columns
-        list_temp = list_temp[0:len(list_temp)-1]
-        temp_df=temp_df.drop(columns=list_temp)
-        
-        
-        #Append treatment dataframe to a list of dataframes
-        dataframe_list.append(temp_df)
+        for i in range(n):
+            current_treatment=treatments[i]
+            samples = list(map_file.get_ids(f"[{col}]='{current_treatment}'"))
+            for i in samples:
+                if i not in all_samples:
+                    print(f"{i} is not in the ASV table, please check raw counts file for this sequence run")
+                    samples.remove(i)
+            temp_df=asv_table[samples]
+            
+            #Change colum names
+            replicates=[]
+            for i in range(len(samples)):
+                replicates.append(current_treatment+'_'+samples[i].split('.')[-1])
+
+            temp_df.columns=replicates
+            
+            #Append treatment dataframe to a list of dataframes
+            dataframe_list.append(temp_df)
+            
     
     #Concate each dataframe from the data frame list by columns    
     merged_data=pd.concat(dataframe_list, axis=1)
@@ -339,6 +362,18 @@ def biime_formatter(asv_table : Artifact, map_file : Metadata , col ,treatments,
     curr_row = 0
     treatments=merged_data.columns.to_list()
     top_n_taxa = []
+    filter_for_list=["k__Bacteria;Other",
+  "k__Fungi;Other",
+  "k__Eukaryota;Other",
+  "k__Bacteria;p__unclassified_Bacteria",
+  "k__Fungi;p__unclassified_Fungi",
+  "k__Eukaryota;p__unclassified_Eukaryota",
+  "k__Bacteria_OR_k__unclassified_;Other",
+  "k__Fungi_OR_k__unclassified_;Other",
+  "k__Eukaryota_OR_k__unclassified_;Other",
+  "k__Unassigned;Other"]
+    if filter == True:
+        print('Filtering data for ambiguous ASVs')
     
     #Get the top N taxa
     print(f"Finding top {num} ASVs...")
@@ -354,9 +389,14 @@ def biime_formatter(asv_table : Artifact, map_file : Metadata , col ,treatments,
             
             
             #Check if taxa is not already in the top taxa list
-            if taxa not in top_n_taxa:
-                top_n_taxa.append(taxa)
-                counter+=1
+            if filter == True:
+                if taxa not in top_n_taxa and taxa not in filter_for_list:
+                    top_n_taxa.append(taxa)
+                    counter+=1
+            else:
+                if taxa not in top_n_taxa:
+                    top_n_taxa.append(taxa)
+                    counter+=1
             
             #If we still don't have the top N taxa then keep looping
             if counter >= num:
@@ -434,6 +474,7 @@ if __name__ == '__main__':
     parser.add_argument('-t', "--formatter-type", required=True, help="Type of formatter to process data with\nb = Biime Formatter\nj=Borneman prism formatter\nq=Qiime 2 Formatter", type=str)
     parser.add_argument('-l', "--treatments", nargs='+', type=str, help="Treatments to process")
     parser.add_argument('-d', "--output-dir", required=True, help="Output directory location",type=str)
+    parser.add_argument('-s', "--split-replicates", action="store_true", help="Keep replicates ungrouped")
     parser.add_argument('-h', '--help', action='help', default=argparse.SUPPRESS, help='Display commands possible with this program.')
     args = parser.parse_args()
 
@@ -445,12 +486,14 @@ if __name__ == '__main__':
     output=os.path.join(args.output_dir,"taxanomic-output/")
     formatter_type=args.formatter_type
     title=args.plot_title
+    split_replicates=args.split_replicates
+    filter=args.filter
     
     if ((asv_table := validate_data(data_file)) != None) and ((map_file := Metadata.load(map_file)) != None):
         if not os.path.exists(output):
             os.mkdir(output)
         if formatter_type == 'b':
-            biime_formatter(asv_table, map_file, data_column, treatments, n_taxa, output, title)
+            biime_formatter(asv_table, map_file, data_column, treatments, n_taxa, output, title, split_replicates, filter)
         elif formatter_type == 'j':
             borneman_prism_formatter(asv_table, map_file, data_column, treatments, n_taxa, output)
         elif formatter_type == 'q':
