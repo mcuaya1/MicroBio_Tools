@@ -5,6 +5,7 @@ from qiime2 import Metadata
 from qiime2 import Artifact
 from qiime2.plugins import feature_table
 from qiime2.plugins.taxa.visualizers import barplot
+import matplotlib.ticker as ticker
 import matplotlib.pyplot as plt
 import numpy as np 
 import pandas as pd
@@ -13,7 +14,7 @@ import pandas as pd
 #To clean up asv labels
 def asv_label_formatter(asv_list):
     for i in range(len(asv_list)):
-        if 'Other' in asv_list[i]:
+        if 'Other' in asv_list[i] or '__':
             if 'g__' in asv_list[i]:
                 asv_list[i] = asv_list[i].split(';')[5]
                 
@@ -53,7 +54,7 @@ def visualizer(top_taxa_table, plot_title, outputdir):
         
     headers = top_taxa_table.columns.to_list()
     
-    fig, ax = plt.subplots(figsize = (15, 10))
+    fig, ax = plt.subplots(figsize = (100, 10))
     
     #Generating color map for bar plot
     #https://stackoverflow.com/questions/16006572/plotting-different-colors-in-matplotlib
@@ -90,7 +91,6 @@ def visualizer(top_taxa_table, plot_title, outputdir):
     #https://stackoverflow.com/questions/12402561/how-to-set-font-size-of-matplotlib-axis-legend
     plt.setp(plt.gca().get_legend().get_texts(), fontsize='15')
     plt.setp(plt.gca().get_legend().get_title(),fontsize='20')
-
     #https://matplotlib.org/stable/gallery/text_labels_and_annotations/titles_demo.html
     ax.set_title(f"{plot_title}",fontsize='20')
 
@@ -340,14 +340,14 @@ def biime_formatter(asv_table : Artifact, map_file : Metadata , col ,treatments,
                     print(f"{i} is not in the ASV table, please check raw counts file for this sequence run")
                     samples.remove(i)
             temp_df=asv_table[samples]
-            
+            print(temp_df)
             #Change colum names
             replicates=[]
             for i in range(len(samples)):
-                replicates.append(current_treatment+'_'+samples[i].split('.')[-1])
+                replicates.append(current_treatment+'_'+samples[i])
 
             temp_df.columns=replicates
-            
+            print(temp_df)
             #Append treatment dataframe to a list of dataframes
             dataframe_list.append(temp_df)
             
@@ -427,6 +427,7 @@ def biime_formatter(asv_table : Artifact, map_file : Metadata , col ,treatments,
     raw_asv_strings.append("Other")
     
     #Format ASV lables
+    print(raw_asv_strings)
     asv_label_formatter(top_n_taxa)
 
     top_n_taxa.append("Other")
