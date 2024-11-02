@@ -37,7 +37,7 @@ def visualizer(data_dict, plot_title, outputdir):
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     plt.tight_layout()
-    fig.savefig(f"{output}{data_column}_alpha_plot.png")
+    fig.savefig(f"{output}alpha_plot.png")
 
 def stats_generator(stats, outputdir):
     #Get the amount of samples in a meta group
@@ -85,15 +85,28 @@ def alpha_diversity(asv_table, map_file, data_column, treatments, plot_title, ou
     #Further resources can be found at the following links below:
     #https://develop.qiime2.org/en/latest/intro.html
     #https://docs.qiime2.org/2024.5/plugins/
+    
     #Filter feature table to only contain samples with a tag in the given column
     asv_table_filtered= feature_table.methods.filter_samples(table=asv_table, metadata=map_file, where=f"{data_column} NOT NULL")
     asv_table_filtered = asv_table_filtered.filtered_table
+    #NOTE: Does filter properly! 
+    
+    #Calculate the alpha diversity of each sample 
     alpha_results = diversity.pipelines.alpha(table=asv_table_filtered, metric='shannon')
     alpha_diversity_table = alpha_results.alpha_diversity
-    #print(alpha_diversity_table.view(pd.Series))
+    #NOTE: Does calculate alpha diversity values 
+    alpha_diversity_table = pd.DataFrame(alpha_diversity_table.view(pd.Series))
+    alpha_diversity_table.index.rename('samples',inplace=True)
+    """
+    The goal here is to the process only given treatments, for example if given CAR then 
+    this code block should extract only these samples from the ASV table 
+
+    NOTE: We should first get the alpha diversity table and parse out the samples we want
+    """
     print("-------------------------------")
-    asv_table=asv_table.view(pd.DataFrame)
-    asv_table=asv_table.T
+    #asv_table=asv_table.view(pd.DataFrame)
+    #asv_table=asv_table.T
+    
     treatments=treatments[0].split(',')
     print('Treatments to be processed...')
     for i in range(len(treatments)):
@@ -101,7 +114,7 @@ def alpha_diversity(asv_table, map_file, data_column, treatments, plot_title, ou
     
     n = len(treatments)
     dataframe_list=[]
-    all_samples=asv_table.columns.to_list()
+    all_samples=alpha_diversity_table.index.to_list()
     for i in range(n):
         #Get the current treatment
         current_treatment=treatments[i]
@@ -109,34 +122,29 @@ def alpha_diversity(asv_table, map_file, data_column, treatments, plot_title, ou
         #Extract the samples from map file that are labeled with the current treatement
         # *Uses qiime 2 Metdata function 'get_ids' to extract all samples from a treatment based on the map file 
         samples = list(map_file.get_ids(f"[{data_column}]='{current_treatment}'"))
-        for i in samples:
-            if i not in all_samples:
-                print(f"{i} is not in the ASV table, please check raw counts file for this sequence run")
-                samples.remove(i)
-        
-        #Create a temp dataframe which only contains samples related to current treatment
-        temp_df=asv_table[samples]
-        
-        #Get each ASVs total abundance across all current samples
-        #*Create column in the temp dataframe with these values and label the column by the current treatment
-        temp_df[f'{current_treatment}'] = temp_df[temp_df.columns].sum(axis=1)
-        
-        #Remove samples from temp dataframe by extracting them from the data frame and dropping them
-        # *Ensures that 'treatment' column is the only one present
-        list_temp = temp_df.columns
-        list_temp = list_temp[0:len(list_temp)-1]
-        temp_df=temp_df.drop(columns=list_temp)
-        
-        
+        #Here we will go through each sample and find its corresponding alpha diversity value
+        alpha_diversity_score=[]
+        for sample in samples:
+            if sample not in all_samples:
+                print(f"{sample} is not in the ASV table, please check raw counts file for this sequence run")
+                samples.remove(sample)
+            else:
+                alpha_diversity_score.append((sample,alpha_diversity_table.loc[sample,'shannon_entropy']))
+        temp_df=pd.DataFrame({'score':[alpha_diversity_score]}, index=[current_treatment])
+        temp_df.index.rename('treatment',inplace=True)
+        print(f'current df {temp_df}')
+        exit(1)
         #Append treatment dataframe to a list of dataframes
         dataframe_list.append(temp_df)
             
     
-    #Concate each dataframe from the data frame list by columns    
-    asv_table_filtered=pd.concat(dataframe_list, axis=1)
+    #Concate each dataframe from the data frame list by columns
+    print(dataframe_list[0])
+    exit(1)
+    asv_table_filtered=pd.concat(dataframe_list, axis=0, join='outer')
 
     print("Merged, grouped, and filtered down table...")
-    print(asv_table_filtered)
+    print(asv_table_filtered.columns.to_list())
     exit(1)
     #Run Shannon alpha diversity metric on the filtered table
     alpha_results = diversity.pipelines.alpha(table=asv_table_filtered, metric='shannon')
