@@ -14,8 +14,6 @@ from qiime2 import Metadata
 from qiime2 import Artifact
 
 
-#TODO: Check results when removing the samples.remove(sample) code in taxa and see if results differ
-#  RERUN ALL reuslts for alpha
 
 def signifcance_test(dataframe, outputdir):
     #https://stackoverflow.com/questions/15943769/how-do-i-get-the-row-count-of-a-pandas-dataframe 
