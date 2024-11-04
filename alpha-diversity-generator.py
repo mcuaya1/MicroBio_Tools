@@ -13,6 +13,10 @@ from qiime2.plugins import diversity
 from qiime2 import Metadata
 from qiime2 import Artifact
 
+
+#TODO: Check results when removing the samples.remove(sample) code in taxa and see if results differ
+#  RERUN ALL reuslts for alpha
+
 def signifcance_test(dataframe, outputdir):
     #https://stackoverflow.com/questions/15943769/how-do-i-get-the-row-count-of-a-pandas-dataframe 
     n = dataframe[dataframe.columns[0]].count()
@@ -28,11 +32,10 @@ def signifcance_test(dataframe, outputdir):
         for j in range(i+1, n):
             jth_treatment = dataframe.iloc[j].item()
             jth_treatment_name = dataframe.index[j]
-            h_stat,p_val  = stats.kruskal(current_treatment, jth_treatment)
-            grouping.append((jth_treatment_name,h_stat, p_val))
-        
-        temp_df=pd.DataFrame({'label, H value, P value':[grouping]}, index=[current_treatment_name])
-        temp_df.index.rename('Group 1',inplace=True)
+            kruskal_test= stats.kruskal(current_treatment, jth_treatment)
+            grouping.append((jth_treatment_name,kruskal_test[0][1], kruskal_test[1][1]))
+        temp_df=pd.DataFrame({'label, H value, P value': [grouping]}, index=[current_treatment_name])
+        temp_df.index.rename('Treatment',inplace=True)
         #Append treatment dataframe to a list of dataframes
         dataframe_list.append(temp_df)
             
@@ -118,15 +121,12 @@ def alpha_diversity(asv_table, map_file, data_column, treatments, plot_title, ou
     #Calculate the alpha diversity of each sample 
     alpha_results = diversity.pipelines.alpha(table=asv_table_filtered, metric='shannon')
     alpha_diversity_table = alpha_results.alpha_diversity
-    
     alpha_diversity_table = pd.DataFrame(alpha_diversity_table.view(pd.Series))
     alpha_diversity_table.index.rename('samples',inplace=True)
-    
     treatments=treatments[0].split(',')
     print('Treatments to be processed...')
     for i in range(len(treatments)):
         print(treatments[i], end='\t')
-    
     n = len(treatments)
     dataframe_list=[]
     all_samples=alpha_diversity_table.index.to_list()
@@ -144,15 +144,19 @@ def alpha_diversity(asv_table, map_file, data_column, treatments, plot_title, ou
         for sample in samples:
             if sample not in all_samples:
                 print(f"{sample} is not in the ASV table, please check raw counts file for this sequence run")
-                samples.remove(sample)
             else:
-                alpha_diversity_score.append((sample,alpha_diversity_table.loc[sample,'shannon_entropy']))
-                raw_scores.append(alpha_diversity_table.loc[sample,'shannon_entropy'])
+                a_score = (sample,alpha_diversity_table.loc[sample,'shannon_entropy'])
+                r_score = alpha_diversity_table.loc[sample,'shannon_entropy']
+                alpha_diversity_score.append(a_score)
+                raw_scores.append(r_score)
 
         #https://stackoverflow.com/questions/9376384/sort-a-list-of-tuples-depending-on-two-elements
         #Here we sort the labeled score by their shaonnon score, this is really just for easing viewing 
-        alpha_diversity_score=sorted(alpha_diversity_score, key=lambda scores: scores[-1])
-
+        if len(alpha_diversity_score) > 0:
+            alpha_diversity_score=sorted(alpha_diversity_score, key=lambda scores: scores[-1])
+        else:
+            alpha_diversity_score.append(0)
+            raw_scores.append(0)
         temp_df=pd.DataFrame({'labeled-scores':[alpha_diversity_score], 'raw-scores': [raw_scores]}, index=[current_treatment])
         temp_df.index.rename('treatment',inplace=True)
         #Append treatment dataframe to a list of dataframes
