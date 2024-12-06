@@ -8,9 +8,7 @@ from qiime2.plugins import feature_table
 from qiime2.plugins import diversity
 from qiime2 import Metadata
 from qiime2 import Artifact
-import matplotlib.pyplot as plt
-import numpy as np
-from skbio import DistanceMatrix
+from qiime2.plugins.emperor.visualizers import plot
 
 def beta_diversity(asv_table, map_file, data_column, treatments, plot_tilte, output):
     treatments = tuple(treatments[0].split(','))
@@ -26,35 +24,15 @@ def beta_diversity(asv_table, map_file, data_column, treatments, plot_tilte, out
             metric='braycurtis')
 
     beta_diversity_table = beta_results.distance_matrix
-#    # https://forum.qiime2.org/t/load-distancematrix-artifact-to-dataframe/11660
-#    # Turn table into a distance matrix
-#
+
+    # https://forum.qiime2.org/t/load-distancematrix-artifact-to-dataframe/11660
+    # Turn table into a distance matrix
+
     pcoa_results = diversity.methods.pcoa(distance_matrix=beta_diversity_table)
     pcoa_results = pcoa_results.pcoa
-    pcoa_results = pcoa_results.view(OrdinationResults)
-    print(pcoa_results)
-#
-# Provides dataframe
-# https://medium.com/@conniezhou678/applied-machine-learning-part-12-principal-coordinate-analysis-pcoa-in-python-5acc2a3afe2d
-# https://www.tutorialspoint.com/numpy/numpy_matplotlib.htm
-    pcoa_results = pcoa_results.samples
-#    pcoa_results.columns = pcoa_results.index.to_list()
-    print(pcoa_results)
-    temp = pcoa_results.values
-    print(temp[1:, 0])
-    print(temp[1:, 1])
-    print(temp[:, 0])
-    print(temp[:, 1])
-    exit(1)
-    fig, ax = plt.subplots(figsize=(15, 10))
-    cmap = plt.get_cmap('tab20')
-    colors = [cmap(i) for i in np.linspace(0, 1, len(treatments))]
-    for i in range(len(pcoa_results.index)):
-        ax.scatter(pcoa_results[i:, 0], pcoa_results[i:, 1], c=colors)
-    plt.grid(True)
-    plt.tight_layout()
-    fig.savefig(f"{output}beta_diversity.png")
-
+    pcoa_results = plot(pcoa=pcoa_results, metadata=map_file)
+    pcoa_results = pcoa_results.visualization
+    pcoa_results.save(f"{output}Beta-diversity.qzv")
 #Further resources can be found at the following links below:
 #https://develop.qiime2.org/en/latest/intro.html
 #https://docs.qiime2.org/2024.5/plugins/
