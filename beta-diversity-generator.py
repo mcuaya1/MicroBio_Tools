@@ -1,4 +1,3 @@
-#TODO: Finish script
 import argparse
 import datetime as dt
 import pandas as pd
@@ -10,7 +9,8 @@ from qiime2 import Metadata
 from qiime2 import Artifact
 import matplotlib.pyplot as plt
 import numpy as np
-from skbio import DistanceMatrix
+
+#Stats output and sig_test(adonis test)
 
 def beta_diversity(asv_table, map_file, data_column, treatments, plot_tilte, output):
     treatments = tuple(treatments[0].split(','))
@@ -33,24 +33,35 @@ def beta_diversity(asv_table, map_file, data_column, treatments, plot_tilte, out
     pcoa_results = pcoa_results.pcoa
     pcoa_results = pcoa_results.view(OrdinationResults)
     print(pcoa_results)
+    eigen_values = pcoa_results.eigvals
+    total_eigen_values = eigen_values.sum()
 #
 # Provides dataframe
 # https://medium.com/@conniezhou678/applied-machine-learning-part-12-principal-coordinate-analysis-pcoa-in-python-5acc2a3afe2d
 # https://www.tutorialspoint.com/numpy/numpy_matplotlib.htm
     pcoa_results = pcoa_results.samples
 #    pcoa_results.columns = pcoa_results.index.to_list()
-    print(pcoa_results)
-    temp = pcoa_results.values
-    print(temp[1:, 0])
-    print(temp[1:, 1])
-    print(temp[:, 0])
-    print(temp[:, 1])
-    exit(1)
     fig, ax = plt.subplots(figsize=(15, 10))
     cmap = plt.get_cmap('tab20')
     colors = [cmap(i) for i in np.linspace(0, 1, len(treatments))]
-    for i in range(len(pcoa_results.index)):
-        ax.scatter(pcoa_results[i:, 0], pcoa_results[i:, 1], c=colors)
+    mapping = {}
+    for i in range(len(colors)):
+        mapping[treatments[i]] = colors[i]
+    column = map_file.get_column(data_column)
+    for row in pcoa_results.itertuples():
+        # print(row.Index, row[1], row[2])
+        label = column.get_value(row.Index)
+        ax.scatter(row[1], row[2], color=mapping[label], label=label)
+    plt.ylabel(f'Axis 2 [{(eigen_values[1]/total_eigen_values):.2%}]', fontsize='15') 
+    plt.xlabel(f'Axis 1 [{(eigen_values[0]/total_eigen_values):.2%}]', fontsize='15') 
+
+# https://stackoverflow.com/questions/13588920/stop-matplotlib-repeating-labels-in-legend
+    handles, labels = plt.gca().get_legend_handles_labels()
+    uniques = dict(zip(labels, handles))
+    ax.legend(uniques.values(), uniques.keys(), bbox_to_anchor=(1, 1), frameon=False, title="Treatments", alignment='left')
+    plt.title(f'{plot_tilte}', fontsize='20') 
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
     plt.grid(True)
     plt.tight_layout()
     fig.savefig(f"{output}beta_diversity.png")
