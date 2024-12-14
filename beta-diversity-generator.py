@@ -10,7 +10,12 @@ from qiime2 import Artifact
 import matplotlib.pyplot as plt
 import numpy as np
 
-#Stats output and sig_test(adonis test)
+
+def signifcance_test(distance_matrix, output):
+    diversity.visualizers.adonis(distance_matrix=distance_matrix,
+                                permutations=999)
+
+
 
 def beta_diversity(asv_table, map_file, data_column, treatments, plot_tilte, output):
     treatments = tuple(treatments[0].split(','))
@@ -26,6 +31,7 @@ def beta_diversity(asv_table, map_file, data_column, treatments, plot_tilte, out
             metric='braycurtis')
 
     beta_diversity_table = beta_results.distance_matrix
+    signifcance_test(beta_diversity_table, output)
 #    # https://forum.qiime2.org/t/load-distancematrix-artifact-to-dataframe/11660
 #    # Turn table into a distance matrix
 #
