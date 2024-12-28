@@ -2,6 +2,8 @@ import argparse
 from datetime import datetime
 import os
 from skbio import OrdinationResults
+from skbio import DistanceMatrix
+from skbio.stats.distance import permanova
 from qiime2.plugins import feature_table
 from qiime2.plugins import diversity
 from qiime2 import Metadata
@@ -10,16 +12,21 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-def signifcance_test(distance_matrix, output, metadata, data_column):
+def signifcance_test(distance_matrix, dataframe, output, metadata, treatments):
     print('Generating signifcance test...')
-    column = metadata.get_column(data_column)
-    permanova = diversity.visualizers.beta_group_significance(
-            distance_matrix=distance_matrix,
-            method='permanova',
-            metadata=column,
-            pairwise=True,
-            permutations=999)
-    permanova.visualization.save(f'{output}/signifcance_test.qzv')
+    distance_matrix = distance_matrix.view(DistanceMatrix)
+    samples_ids = distance_matrix.ids
+    print(samples_ids)
+    print(distance_matrix)
+    permanova(distance_matrix, samples_ids)
+    # column = metadata.get_column(data_column)
+    # permanova = diversity.visualizers.beta_group_significance(
+    #         distance_matrix=distance_matrix,
+    #         method='permanova',
+    #         metadata=column,
+    #         pairwise=True,
+    #         permutations=999)
+    # permanova.visualization.save(f'{output}/signifcance_test.qzv')
 
 
 def stats_generator(stats, output):
@@ -70,8 +77,7 @@ def beta_diversity(asv_table, map_file, data_column, treatments, plot_tilte, out
             metric='braycurtis')
 
     beta_diversity_table = beta_results.distance_matrix
-#    # https://forum.qiime2.org/t/load-distancematrix-artifact-to-dataframe/11660
-    signifcance_test(beta_diversity_table, output, map_file, data_column)
+    # https://forum.qiime2.org/t/load-distancematrix-artifact-to-dataframe/11660
     pcoa_results = diversity.methods.pcoa(distance_matrix=beta_diversity_table)
     pcoa_results = pcoa_results.pcoa
     pcoa_results = pcoa_results.view(OrdinationResults)
@@ -83,6 +89,7 @@ def beta_diversity(asv_table, map_file, data_column, treatments, plot_tilte, out
 # https://medium.com/@conniezhou678/applied-machine-learning-part-12-principal-coordinate-analysis-pcoa-in-python-5acc2a3afe2d
 # https://www.tutorialspoint.com/numpy/numpy_matplotlib.htm
     pcoa_results = pcoa_results.samples
+    signifcance_test(beta_diversity_table, pcoa_results, output, map_file, treatments)
     stats_generator(pcoa_results, output)
     fig, ax = plt.subplots(figsize=(15, 10))
     cmap = plt.get_cmap('tab20')
