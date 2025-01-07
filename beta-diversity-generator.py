@@ -10,6 +10,7 @@ from qiime2 import Metadata
 from qiime2 import Artifact
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 
 
 def signifcance_test(distance_matrix,
@@ -31,20 +32,20 @@ def signifcance_test(distance_matrix,
     filtered_dm = distance_matrix.filter(comparison_samples)
     print(f'filter_dm={filtered_dm}')
     distance_df = filtered_dm.to_data_frame()
-    print(f'distance_df={distance_df}')
+    distance_df.index.names = ['Samples']
+    print(distance_df)
     samples_to_treatment = map_file.get_column(f"{data_column}")
     samples_to_treatment = samples_to_treatment.filter_ids(comparison_samples)
     samples_to_treatment = samples_to_treatment.to_dataframe()
+    samples_to_treatment.index.names = ['Samples']
     print(samples_to_treatment)
-    # permanova(distance_matrix, samples_ids)
-    # column = metadata.get_column(data_column)
-    # permanova = diversity.visualizers.beta_group_significance(
-    #         distance_matrix=distance_matrix,
-    #         method='permanova',
-    #         metadata=column,
-    #         pairwise=True,
-    #         permutations=999)
-    # permanova.visualization.save(f'{output}/signifcance_test.qzv')
+    filtered_df = pd.merge(distance_df,
+                           samples_to_treatment,
+                           left_index=True,
+                           right_index=True)
+    print(filtered_df)
+    results = permanova(filtered_dm, filtered_df, f'{data_column}')
+    print(results)
 
 
 def stats_generator(stats, output):
