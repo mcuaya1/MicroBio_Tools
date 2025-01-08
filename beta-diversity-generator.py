@@ -11,44 +11,77 @@ from qiime2 import Artifact
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from collections import defaultdict
+
+
+def qiime2_signifcance_test(distance_matrix):
+    print("TEMP")
 
 
 def signifcance_test(distance_matrix,
-                     dataframe, output,
+                     dataframe,
+                     output,
                      metadata,
                      treatments,
-                     data_column):
-    print('Generating signifcance test...')
-    current_treatment = treatments[0]
-    treatment_a = map_file.get_ids(f"[{data_column}]='{current_treatment}'")
-    current_treatment = treatments[1]
-    treatment_b = map_file.get_ids(f"[{data_column}]='{current_treatment}'")
+                     data_column) -> pd.DataFrame:
+
+    # Create empty dictionary to store results
+    results_df = defaultdict(dict)
+    # Transform qiime2 Distance Matrix object to skbio
+    # DistanceMatrix object
     distance_matrix = distance_matrix.view(DistanceMatrix)
-    dm_panda = distance_matrix.to_data_frame()
-    print(f'treatments_a={treatment_a}')
-    print(f'treatments_b={treatment_b}')
-    comparison_samples = treatment_a.union(treatment_b)
-    print(f'comparison={comparison_samples}')
-    filtered_dm = distance_matrix.filter(comparison_samples)
-    print(f'filter_dm={filtered_dm}')
-    distance_df = filtered_dm.to_data_frame()
-    distance_df.index.names = ['Samples']
-    print(distance_df)
-    samples_to_treatment = map_file.get_column(f"{data_column}")
-    samples_to_treatment = samples_to_treatment.filter_ids(comparison_samples)
-    samples_to_treatment = samples_to_treatment.to_dataframe()
-    samples_to_treatment.index.names = ['Samples']
-    print(samples_to_treatment)
-    filtered_df = pd.merge(distance_df,
-                           samples_to_treatment,
-                           left_index=True,
-                           right_index=True)
-    print(filtered_df)
-    results = permanova(filtered_dm, filtered_df, f'{data_column}')
-    print(results)
+    print('Generating signifcance test...')
+
+    for i in range(len(treatments)):
+        # Set ith treatment
+        treatment_a = treatments[i]
+
+        # Get all samples from map file that relate to treatment_a
+        a_ids = map_file.get_ids(f"[{data_column}]='{treatment_a}'")
+        for j in range(i+1, len(treatments)):
+            # Set jth treatment
+            treatment_b = treatments[j]
+
+            # Get all samples from map file that relate to treatment_b
+            b_ids = map_file.get_ids(f"[{data_column}]='{treatment_b}'")
+
+            # Union both b_ids and a_ids to get all samples
+            # to be compared against
+            compare_ids = a_ids.union(b_ids)
+
+            # Filter DistanceMatrix to contain all samples to be compared
+            # against
+            filtered_dm = distance_matrix.filter(compare_ids)
+
+            # Create a DataFrame object from filltered DistanceMatrix object
+            dm_df = filtered_dm.to_data_frame()
+            dm_df.index.names = ['IDs']
+
+            # Create a DataFrame which maps IDs to treatments
+            map_ids = map_file.get_column(f"{data_column}")
+            map_ids = map_ids.filter_ids(compare_ids)
+            map_ids = map_ids.to_dataframe()
+            map_ids.index.names = ['IDs']
+            # Merge to DataFrames to finish mapping IDs to treatments
+            main_df = pd.merge(dm_df,
+                               map_ids,
+                               left_index=True,
+                               right_index=True)
+
+            # Run PERMANOVA test against ith and jth treatments
+            results = permanova(filtered_dm,
+                                main_df,
+                                f'{data_column}')
+            results_df[f"{treatment_a}"][f"{treatment_b}"] = {
+                    "Sample size": results.get("sample size"),
+                    "Permutations": results.get("number of permutations"),
+                    "pseudo-F": round(results.get("test statistic"), 6),
+                    "p-value": round(results.get("p-value"), 3)
+                    }
+    return pd.DataFrame.from_dict(results_df, orient='index')
 
 
-def stats_generator(stats, output):
+def stats_generator(stats, output, sig_results):
     colums_to_drop = stats.columns.to_list()
     dataframe = stats.drop(columns=colums_to_drop[5:])
     renumber_columns = dataframe.columns.to_list()
@@ -64,7 +97,9 @@ def stats_generator(stats, output):
                 ## To find further sequence specific information, refer to table 03 generated previously\n
                 **Please refer to the excel or csv file generated to perform further analysis.**\n
                 Date file was generated: {time_generated}\n
-                {dataframe.to_markdown()}\n''')
+                {dataframe.to_markdown()}\n
+                ## PERMANOVA results
+                {sig_results.to_markdown()}''')
 
     print('Generating html file with table stats...')
     with open(f'{output}beta_diversity_stats.html', "w") as f:
@@ -76,10 +111,12 @@ def stats_generator(stats, output):
         </head>
         <body>
             <h1>Beta diversity stats</h1>
-            <h2 >To find further sequence specific information, refer to table 03 generated previously.</h2>
+            <h2>To find further sequence specific information, refer to table 03 generated previously.</h2>
             <strong>Please refer to the excel file generated to perform further analysis. </strong>
             <p>Date file was generated: {time_generated}</p>
-            {dataframe.to_html()}''')
+            {dataframe.to_html()}
+            <h2>PERMANOVA results</h2>
+            {sig_results.to_html()}''')
 
 
 def beta_diversity(asv_table, map_file, data_column, treatments, plot_tilte, output):
@@ -108,8 +145,13 @@ def beta_diversity(asv_table, map_file, data_column, treatments, plot_tilte, out
 # https://medium.com/@conniezhou678/applied-machine-learning-part-12-principal-coordinate-analysis-pcoa-in-python-5acc2a3afe2d
 # https://www.tutorialspoint.com/numpy/numpy_matplotlib.htm
     pcoa_results = pcoa_results.samples
-    signifcance_test(beta_diversity_table, pcoa_results, output, map_file, treatments, data_column)
-    stats_generator(pcoa_results, output)
+    sig_results = signifcance_test(beta_diversity_table,
+                                   pcoa_results,
+                                   output,
+                                   map_file,
+                                   treatments,
+                                   data_column)
+    stats_generator(pcoa_results, output, sig_results)
     fig, ax = plt.subplots(figsize=(15, 10))
     cmap = plt.get_cmap('tab20')
     colors = [cmap(i) for i in np.linspace(0, 1, len(treatments))]
