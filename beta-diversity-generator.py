@@ -14,8 +14,15 @@ import pandas as pd
 from collections import defaultdict
 
 
-def qiime2_signifcance_test(distance_matrix):
-    print("TEMP")
+def qiime2_signifcance_test(distance_matrix, metadata, data_column, output):
+    column = metadata.get_column(data_column)
+    permanova = diversity.visualizers.beta_group_significance(
+            distance_matrix=distance_matrix,
+            method='permanova',
+            metadata=column,
+            pairwise=True,
+            permutations=999)
+    permanova.visualization.save(f'{output}/signifcance_test.qzv')
 
 
 def signifcance_test(distance_matrix,
@@ -133,6 +140,7 @@ def beta_diversity(asv_table, map_file, data_column, treatments, plot_tilte, out
             metric='braycurtis')
 
     beta_diversity_table = beta_results.distance_matrix
+
     # https://forum.qiime2.org/t/load-distancematrix-artifact-to-dataframe/11660
     pcoa_results = diversity.methods.pcoa(distance_matrix=beta_diversity_table)
     pcoa_results = pcoa_results.pcoa
