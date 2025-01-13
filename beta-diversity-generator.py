@@ -93,6 +93,7 @@ def signifcance_test(distance_matrix,
 
     return pd.DataFrame.from_dict(results_df, orient='index')
 
+
 # Generate statsics
 def stats_generator(stats,
                     output,
@@ -119,6 +120,7 @@ def stats_generator(stats,
                 ## To find further sequence specific information, refer to table 03 generated previously\n
                 **Please refer to the excel or csv file generated to perform further analysis.**\n
                 Date file was generated: {time_generated}\n
+                ## Distance points
                 {dists_pts.to_markdown()}\n
                 ## PERMANOVA results
                 {sig_results.to_markdown()}''')
@@ -137,6 +139,7 @@ def stats_generator(stats,
             <h2>To find further sequence specific information, refer to table 03 generated previously.</h2>
             <strong>Please refer to the excel file generated to perform further analysis. </strong>
             <p>Date file was generated: {time_generated}</p>
+            <h2>Distance points</h2>
             {dists_pts.to_html()}
             <h2>PERMANOVA results</h2>
             {sig_results.to_html()}''')
