@@ -17,7 +17,7 @@ from collections import defaultdict
 def qiime2_signifcance_test(distance_matrix,
                             metadata,
                             data_column,
-                            output):
+                            output) -> None:
     column = metadata.get_column(data_column)
     permanova = diversity.visualizers.beta_group_significance(
             distance_matrix=distance_matrix,
@@ -44,6 +44,8 @@ def signifcance_test(distance_matrix,
     distance_matrix = distance_matrix.view(DistanceMatrix)
     print('Generating signifcance test...')
 
+    all_ids = distance_matrix.ids
+
     for i in range(len(treatments)):
         # Set ith treatment
         treatment_a = treatments[i]
@@ -59,7 +61,11 @@ def signifcance_test(distance_matrix,
 
             # Union both b_ids and a_ids to get all samples
             # to be compared against
-            compare_ids = a_ids.union(b_ids)
+            compare_ids = list(a_ids.union(b_ids))
+
+            for id in compare_ids:
+                if id not in all_ids:
+                    compare_ids.remove(id)
 
             # Filter DistanceMatrix to contain all samples to be compared
             # against
@@ -110,7 +116,7 @@ def stats_generator(stats,
     # Generate excel file filed with distance points/sig test
     print('Generating excel file...')
     dists_pts.to_excel(f'{output}beta_diversity_stats.xlsx')
-    sig_results.to_excel()
+    sig_results.to_excel(f'{output}signifcance_test_results.xlsx')
 
     # Generate markdown file
     print('Generating markdown file with table stats...')
@@ -153,7 +159,7 @@ def beta_diversity(asv_table,
                    output) -> None:
 
     # Split treatments into list
-    treatments = treatments[0].split(',')
+    treatments = tuple(treatments[0].split(','))
 
     # Filter asv table to include only samples from specified group
     asv_table_filtered = feature_table.methods.filter_samples(table=asv_table,
@@ -173,7 +179,7 @@ def beta_diversity(asv_table,
     pcoa_results = diversity.methods.pcoa(distance_matrix=beta_diversity_table)
     pcoa_results = pcoa_results.pcoa
     pcoa_results = pcoa_results.view(OrdinationResults)
-    
+
     # Output Ordination results and calculate sum of eigen values
     print(pcoa_results)
     eigen_values = pcoa_results.eigvals
@@ -184,7 +190,6 @@ def beta_diversity(asv_table,
     # https://www.tutorialspoint.com/numpy/numpy_matplotlib.htm
     pcoa_results = pcoa_results.samples
 
-    
     # Preform signifcance test
     sig_results = signifcance_test(beta_diversity_table,
                                    pcoa_results,
@@ -197,6 +202,12 @@ def beta_diversity(asv_table,
     stats_generator(pcoa_results,
                     output,
                     sig_results)
+
+    # For testing purposes
+    # qiime2_signifcance_test(beta_diversity_table,
+    #                         map_file,
+    #                         data_column,
+    #                         output)
 
     fig, ax = plt.subplots(figsize=(15, 10))
     cmap = plt.get_cmap('tab20')
@@ -214,8 +225,8 @@ def beta_diversity(asv_table,
         ax.scatter(row[1], row[2], color=mapping[label], label=label)
 
     # Calculate distance axis
-    plt.ylabel(f'Axis 2 [{(eigen_values[1]/total_eigen_values):.2%}]', fontsize='15') 
-    plt.xlabel(f'Axis 1 [{(eigen_values[0]/total_eigen_values):.2%}]', fontsize='15') 
+    plt.ylabel(f'Axis 2 [{(eigen_values[1]/total_eigen_values):.2%}]', fontsize='15')
+    plt.xlabel(f'Axis 1 [{(eigen_values[0]/total_eigen_values):.2%}]', fontsize='15')
 
     # Filter out duplicates from legend table
     # https://stackoverflow.com/questions/13588920/stop-matplotlib-repeating-labels-in-legend
