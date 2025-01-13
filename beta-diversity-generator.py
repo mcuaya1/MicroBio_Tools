@@ -14,7 +14,10 @@ import pandas as pd
 from collections import defaultdict
 
 
-def qiime2_signifcance_test(distance_matrix, metadata, data_column, output):
+def qiime2_signifcance_test(distance_matrix,
+                            metadata,
+                            data_column,
+                            output):
     column = metadata.get_column(data_column)
     permanova = diversity.visualizers.beta_group_significance(
             distance_matrix=distance_matrix,
@@ -25,6 +28,7 @@ def qiime2_signifcance_test(distance_matrix, metadata, data_column, output):
     permanova.visualization.save(f'{output}/signifcance_test.qzv')
 
 
+# Signifcance test (PERMANOVA)
 def signifcance_test(distance_matrix,
                      dataframe,
                      output,
@@ -34,6 +38,7 @@ def signifcance_test(distance_matrix,
 
     # Create empty dictionary to store results
     results_df = defaultdict(dict)
+
     # Transform qiime2 Distance Matrix object to skbio
     # DistanceMatrix object
     distance_matrix = distance_matrix.view(DistanceMatrix)
@@ -85,18 +90,28 @@ def signifcance_test(distance_matrix,
                     "pseudo-F": round(results.get("test statistic"), 6),
                     "p-value": round(results.get("p-value"), 3)
                     }
+
     return pd.DataFrame.from_dict(results_df, orient='index')
 
+# Generate statsics
+def stats_generator(stats,
+                    output,
+                    sig_results) -> None:
+    # Extract distance levels
+    dists = stats.columns.to_list()
 
-def stats_generator(stats, output, sig_results):
-    colums_to_drop = stats.columns.to_list()
-    dataframe = stats.drop(columns=colums_to_drop[5:])
-    renumber_columns = dataframe.columns.to_list()
-    renumber_columns = [x + 1 for x in renumber_columns]
-    dataframe.columns = renumber_columns
+    # Drop all other levels and relabel columns
+    dists_pts = stats.drop(columns=dists[5:])
+    renum = dists_pts.columns.to_list()
+    renum = [x + 1 for x in renum]
+    dists_pts.columns = renum
+
+    # Generate excel file filed with distance points/sig test
     print('Generating excel file...')
-    dataframe.to_excel(f'{output}beta_diversity_stats.xlsx')
+    dists_pts.to_excel(f'{output}beta_diversity_stats.xlsx')
+    sig_results.to_excel()
 
+    # Generate markdown file
     print('Generating markdown file with table stats...')
     time_generated=datetime.now().strftime("%d/%m/%y %H:%M:%S")
     with open(f'{output}beta_diversity_stats.md', "w") as f:
@@ -104,10 +119,11 @@ def stats_generator(stats, output, sig_results):
                 ## To find further sequence specific information, refer to table 03 generated previously\n
                 **Please refer to the excel or csv file generated to perform further analysis.**\n
                 Date file was generated: {time_generated}\n
-                {dataframe.to_markdown()}\n
+                {dists_pts.to_markdown()}\n
                 ## PERMANOVA results
                 {sig_results.to_markdown()}''')
 
+    # Generate html file
     print('Generating html file with table stats...')
     with open(f'{output}beta_diversity_stats.html', "w") as f:
         f.write(f'''<!doctype html>
@@ -121,13 +137,21 @@ def stats_generator(stats, output, sig_results):
             <h2>To find further sequence specific information, refer to table 03 generated previously.</h2>
             <strong>Please refer to the excel file generated to perform further analysis. </strong>
             <p>Date file was generated: {time_generated}</p>
-            {dataframe.to_html()}
+            {dists_pts.to_html()}
             <h2>PERMANOVA results</h2>
             {sig_results.to_html()}''')
 
 
-def beta_diversity(asv_table, map_file, data_column, treatments, plot_tilte, output):
-    treatments = tuple(treatments[0].split(','))
+def beta_diversity(asv_table,
+                   map_file,
+                   data_column,
+                   treatments,
+                   plot_tilte,
+                   output) -> None:
+
+    # Split treatments into list
+    treatments = treatments[0].split(',')
+
     # Filter asv table to include only samples from specified group
     asv_table_filtered = feature_table.methods.filter_samples(table=asv_table,
                                                               metadata=map_file,
@@ -141,53 +165,73 @@ def beta_diversity(asv_table, map_file, data_column, treatments, plot_tilte, out
 
     beta_diversity_table = beta_results.distance_matrix
 
+    # Convert qiime2 distance martix object into skbio DistanceMatrix
     # https://forum.qiime2.org/t/load-distancematrix-artifact-to-dataframe/11660
     pcoa_results = diversity.methods.pcoa(distance_matrix=beta_diversity_table)
     pcoa_results = pcoa_results.pcoa
     pcoa_results = pcoa_results.view(OrdinationResults)
+    
+    # Output Ordination results and calculate sum of eigen values
     print(pcoa_results)
     eigen_values = pcoa_results.eigvals
     total_eigen_values = eigen_values.sum()
-#
-# Provides dataframe
-# https://medium.com/@conniezhou678/applied-machine-learning-part-12-principal-coordinate-analysis-pcoa-in-python-5acc2a3afe2d
-# https://www.tutorialspoint.com/numpy/numpy_matplotlib.htm
+
+    # Extract distance points from pcoa results
+    # https://medium.com/@conniezhou678/applied-machine-learning-part-12-principal-coordinate-analysis-pcoa-in-python-5acc2a3afe2d
+    # https://www.tutorialspoint.com/numpy/numpy_matplotlib.htm
     pcoa_results = pcoa_results.samples
+
+    
+    # Preform signifcance test
     sig_results = signifcance_test(beta_diversity_table,
                                    pcoa_results,
                                    output,
                                    map_file,
                                    treatments,
                                    data_column)
-    stats_generator(pcoa_results, output, sig_results)
+
+    # Generate statsics
+    stats_generator(pcoa_results,
+                    output,
+                    sig_results)
+
     fig, ax = plt.subplots(figsize=(15, 10))
     cmap = plt.get_cmap('tab20')
+
+    # Generate and assign color mapping
     colors = [cmap(i) for i in np.linspace(0, 1, len(treatments))]
     mapping = {}
     for i in range(len(colors)):
         mapping[treatments[i]] = colors[i]
     column = map_file.get_column(data_column)
+
+    # Generate Scatter plot
     for row in pcoa_results.itertuples():
-        # print(row.Index, row[1], row[2])
         label = column.get_value(row.Index)
         ax.scatter(row[1], row[2], color=mapping[label], label=label)
+
+    # Calculate distance axis
     plt.ylabel(f'Axis 2 [{(eigen_values[1]/total_eigen_values):.2%}]', fontsize='15') 
     plt.xlabel(f'Axis 1 [{(eigen_values[0]/total_eigen_values):.2%}]', fontsize='15') 
 
-# https://stackoverflow.com/questions/13588920/stop-matplotlib-repeating-labels-in-legend
+    # Filter out duplicates from legend table
+    # https://stackoverflow.com/questions/13588920/stop-matplotlib-repeating-labels-in-legend
     handles, labels = plt.gca().get_legend_handles_labels()
     uniques = dict(zip(labels, handles))
-    ax.legend(uniques.values(), uniques.keys(), bbox_to_anchor=(1, 1), frameon=False, title="Treatments", loc='upper left')
-    plt.title(f'{plot_tilte}', fontsize='20') 
+    ax.legend(uniques.values(),
+              uniques.keys(),
+              bbox_to_anchor=(1, 1),
+              frameon=False,
+              title="Treatments",
+              loc='upper left')
+
+    # Save plot
+    plt.title(f'{plot_tilte}', fontsize='20')
     ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False) 
+    ax.spines['right'].set_visible(False)
     fig.tight_layout()
     plt.grid(True)
     fig.savefig(f"{output}beta_diversity.png")
-
-#Further resources can be found at the following links below:
-#https://develop.qiime2.org/en/latest/intro.html
-#https://docs.qiime2.org/2024.5/plugins/
 
 
 def validate_data(asv_table) -> None:
@@ -196,18 +240,53 @@ def validate_data(asv_table) -> None:
         asv_table = Artifact.load(asv_table)
         return asv_table
 
-    return None
-
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(add_help=False, prog="betsa-diversity-genator.py", description="Program to generate custom beta diversity scatter plots")
-    parser.add_argument('-i',"--input-file", required=True, help="Imported feature table",type=str)
-    parser.add_argument('-m',"--map-file", required=True, help="Map file for data",type=str)
-    parser.add_argument('-c',"--column", required=True, help="Colmun to parse for data",type=str)
-    parser.add_argument('-p', "--plot-title", help="Tilte for plot",type=str)
-    parser.add_argument('-l', "--listing", nargs='+', type=str, help="Set a preferred listing for x axis (Default is nothing)")
-    parser.add_argument('-d', "--output-dir", required=True, help="Output directory location",type=str)
-    parser.add_argument('-h', '--help', action='help', default=argparse.SUPPRESS, help='Display commands possible with this program.')
+    parser = argparse.ArgumentParser(add_help=False,
+                                     prog="betsa-diversity-genator.py",
+                                     description="Program to generate custom beta diversity scatter plots")
+
+    parser.add_argument('-i',
+                        "--input-file",
+                        required=True,
+                        help="Imported feature table",
+                        type=str)
+
+    parser.add_argument('-m',
+                        "--map-file",
+                        required=True,
+                        help="Map file for data",
+                        type=str)
+
+    parser.add_argument('-c',
+                        "--column",
+                        required=True,
+                        help="Colmun to parse for data",
+                        type=str)
+
+    parser.add_argument('-p',
+                        "--plot-title",
+                        help="Tilte for plot",
+                        type=str)
+
+    parser.add_argument('-l',
+                        "--listing",
+                        nargs='+',
+                        type=str,
+                        help="Set a preferred listing for x axis (Default is nothing)")
+
+    parser.add_argument('-d',
+                        "--output-dir",
+                        required=True,
+                        help="Output directory location",
+                        type=str)
+
+    parser.add_argument('-h',
+                        '--help',
+                        action='help',
+                        default=argparse.SUPPRESS,
+                        help='Display commands possible with this program.')
+
     args = parser.parse_args()
     data_file = args.input_file
     map_file = args.map_file
@@ -215,9 +294,9 @@ if __name__ == '__main__':
     plot_tilte = args.plot_title
     treatments = args.listing
     output = os.path.join(args.output_dir, "beta-diversity/")
-    # output=args.output_dir
+
     # Load in ASV table and map file
-    if ((asv_table := validate_data(data_file)) != None) and ((map_file := Metadata.load(map_file)) != None):
+    if ((asv_table := validate_data(data_file)) is not None) and ((map_file := Metadata.load(map_file)) is not None):
         if not os.path.exists(output):
             os.mkdir(output)
         beta_diversity(asv_table, map_file, data_column, treatments, plot_tilte, output)
