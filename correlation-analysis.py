@@ -32,7 +32,9 @@ def asv_label_formatter(asv_list):
             asv_list[i]=asv_list[i].split(';')[-1]
 
 def correlation_analysis(map_file,
-                         corr_col,
+                         corr_col_0,
+                         corr_col_1,
+                         samples_ids,
                          plot_title,
                          top_tax_file,
                          output_dir) -> None:
@@ -42,12 +44,54 @@ def correlation_analysis(map_file,
     top_n = top_n.rename(columns={'Unnamed: 0': 'Treatments'})
     top_n = top_n.set_index('Treatments')
     new_lables = top_n.columns.to_list()
+    
     asv_label_formatter(new_lables)
+    top_n.columns = new_lables
 
-    # Extract correlation values average them
+    # Extract Exp and values
+    samples = map_file.get_column(f"{corr_col_0}").drop_missing_values().to_dataframe()
+    sample_vals = map_file.get_column(f"{corr_col_1}").drop_missing_values().to_dataframe()
+    corr_map = samples.merge(sample_vals,
+                             left_index=True,
+                             right_index=True)
+    corr_map = corr_map.set_index(f'{corr_col_0}')
+
+    # Remove _exp tag from sample names
+    sample_names = corr_map.index.to_list()
+    for i in range(len(sample_names)):
+        sample_names[i] = sample_names[i].split('_')[0]
+
+    corr_map.index = sample_names
+    corr_map.index.name = 'Samples'
+    corr_map = pd.to_numeric(corr_map[f"{corr_col_1}"],
+                             errors='coerce')
+
+    # Group samples by name and get the mean
+    corr_map = corr_map.groupby(corr_map.index).mean()
+    samples_ids = samples_ids.split(',')
+    corr_map = corr_map[corr_map.index.isin(samples_ids)]
+    merged_map = pd.merge(top_n,
+                          corr_map,
+                          left_index=True,
+                          right_index=True,
+                          how='left')
+    fig, ax = plt.subplots(figsize=(15, 10))
+
+    print(merged_map)
+    for i in range(len(new_lables)):
+        ax.scatter(merged_map[new_lables[i]],
+                   merged_map[f"{corr_col_1}"],
+                   label=f"{new_lables[i]}")
+
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.legend()
+    fig.tight_layout()
+    plt.grid(True)
+    fig.savefig(f"{output}corrleation_graph.png")
 
 
-def validate_data(asv_table) -> None:
+def validate_data(asv_table):
     if '.qza' in asv_table:
         asv_table = Artifact.load(asv_table)
         return asv_table
@@ -71,8 +115,18 @@ if __name__ == '__main__':
                         required=True,
                         help="Correlation map file",
                         type=str)
-    parser.add_argument('-c',
-                        "--correlation-column",
+    parser.add_argument('-s',
+                        "--samples",
+                        required=True,
+                        help="Samples, please seperate samples with ',' in between",
+                        type=str)
+    parser.add_argument('-c0',
+                        "--correlation-column-0",
+                        required=True,
+                        help="Colum to corrlate against",
+                        type=str)
+    parser.add_argument('-c1',
+                        "--correlation-column-1",
                         required=True,
                         help="Colum to corrlate against",
                         type=str)
@@ -99,16 +153,20 @@ if __name__ == '__main__':
 
     data_file = args.input_file
     map_file = args.map_file
-    corr_col = args.correlation_column
+    corr_col_0 = args.correlation_column_0
+    corr_col_1 = args.correlation_column_1
     plot_title = args.plot_title
     taxa_file = args.taxa_file
+    samples = args.samples
     output = os.path.join(args.output_dir, "correlation-output/")
 
     if ((asv_table := validate_data(data_file))) and ((map_file := Metadata.load(map_file))):
         if not os.path.exists(output):
             os.mkdir(output)
         correlation_analysis(map_file,
-                             corr_col,
+                             corr_col_0,
+                             corr_col_1,
+                             samples,
                              plot_title,
                              taxa_file,
                              output)
