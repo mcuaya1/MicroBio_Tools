@@ -1,9 +1,10 @@
 import argparse
 from datetime import datetime
 import os
+from sre_compile import dis
 from skbio import OrdinationResults
 from skbio import DistanceMatrix
-from skbio.stats.distance import permanova
+from skbio.stats.distance import permanova, anosim, permdisp
 from qiime2.plugins import feature_table
 from qiime2.plugins import diversity
 from qiime2 import Metadata
@@ -12,6 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from collections import defaultdict
+from rpy2.robjects.packages import importr
 
 
 def qiime2_signifcance_test(distance_matrix,
@@ -28,6 +30,23 @@ def qiime2_signifcance_test(distance_matrix,
     permanova.visualization.save(f'{output}/signifcance_test.qzv')
 
 
+def signifcance_test_kruskal(distance_matrix,
+                     dataframe,
+                     output,
+                     metadata,
+                     treatments,
+                     data_column) -> pd.DataFrame:
+    distance_matrix = distance_matrix.view(DistanceMatrix)
+    all_ids = distance_matrix.ids
+    distance_matrix = distance_matrix.to_data_frame()
+    print(distance_matrix)
+    for i, id in enumerate(treatments):
+        treatment_a = treatments[i]
+        a_ids = map_file.get_ids(f"[{data_column}]='{treatment_a}'")
+        print(treatment_a)
+        print(a_ids)
+
+         
 # Signifcance test (PERMANOVA)
 def signifcance_test(distance_matrix,
                      dataframe,
@@ -46,31 +65,43 @@ def signifcance_test(distance_matrix,
 
     all_ids = distance_matrix.ids
 
+    print(all_ids)
+    print(type(all_ids))
     for i in range(len(treatments)):
         # Set ith treatment
         treatment_a = treatments[i]
 
+        print(f'treatment_a: {treatment_a}')
         # Get all samples from map file that relate to treatment_a
         a_ids = map_file.get_ids(f"[{data_column}]='{treatment_a}'")
+        print(f'a_ids: {a_ids}')
         for j in range(i+1, len(treatments)):
             # Set jth treatment
             treatment_b = treatments[j]
 
+            print(f'treatment_b: {treatment_b}')
             # Get all samples from map file that relate to treatment_b
             b_ids = map_file.get_ids(f"[{data_column}]='{treatment_b}'")
 
+            print(f'b_ids: {b_ids}')
             # Union both b_ids and a_ids to get all samples
             # to be compared against
-            compare_ids = list(a_ids.union(b_ids))
+            temp_compare_ids = list(a_ids.union(b_ids))
 
-            for id in compare_ids:
-                if id not in all_ids:
-                    compare_ids.remove(id)
+            print(f'compare_ids: {temp_compare_ids}')
+
+            # Comparing and updating the list will result in strange errors
+            # Better to store in a copy
+            compare_ids = []
+            for id in temp_compare_ids:
+                if id in all_ids:
+                    compare_ids.append(id)
+
+            print(f'after removing all ids not in the distance martix object: {compare_ids}')
 
             # Filter DistanceMatrix to contain all samples to be compared
             # against
             filtered_dm = distance_matrix.filter(compare_ids)
-
             # Create a DataFrame object from filltered DistanceMatrix object
             dm_df = filtered_dm.to_data_frame()
             dm_df.index.names = ['IDs']
@@ -85,11 +116,12 @@ def signifcance_test(distance_matrix,
                                map_ids,
                                left_index=True,
                                right_index=True)
-
+            print(f'{main_df}')
+            print(f'{filtered_dm}')
             # Run PERMANOVA test against ith and jth treatments
             results = permanova(filtered_dm,
                                 main_df,
-                                f'{data_column}')
+                                column=data_column)
             results_df[f"{treatment_a}"][f"{treatment_b}"] = {
                     "Sample size": results.get("sample size"),
                     "Permutations": results.get("number of permutations"),
@@ -98,6 +130,7 @@ def signifcance_test(distance_matrix,
                     }
 
     return pd.DataFrame.from_dict(results_df, orient='index')
+
 
 
 # Generate statsics
@@ -191,7 +224,14 @@ def beta_diversity(asv_table,
     pcoa_results = pcoa_results.samples
 
     # Preform signifcance test
-    sig_results = signifcance_test(beta_diversity_table,
+    # sig_results = signifcance_test(beta_diversity_table,
+    #                                pcoa_results,
+    #                                output,
+    #                                map_file,
+    #                                treatments,
+    #                                data_column)
+
+    sig_results = signifcance_test_kruskal(beta_diversity_table,
                                    pcoa_results,
                                    output,
                                    map_file,
