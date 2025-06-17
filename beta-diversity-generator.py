@@ -37,14 +37,26 @@ def signifcance_test_kruskal(distance_matrix,
                      treatments,
                      data_column) -> pd.DataFrame:
     distance_matrix = distance_matrix.view(DistanceMatrix)
+
+    #Extract sample ids from Distance Matrix
     all_ids = distance_matrix.ids
+
+    #Convert Distance Matrix to dataframe
     distance_matrix = distance_matrix.to_data_frame()
-    print(distance_matrix)
-    for i, id in enumerate(treatments):
-        treatment_a = treatments[i]
-        a_ids = map_file.get_ids(f"[{data_column}]='{treatment_a}'")
+
+    #Filter Map file to only include information about samples ids in the current distance martix
+    filter_map = map_file.filter_ids(all_ids)
+
+    """
+    Triple dictionary where [Treatment_a][a_id][Treatment_b][b_id] = {H value, P value} 
+    """
+    for i, a_id in enumerate(treatments):
+        treatment_a = a_id
+        a_ids = filter_map.get_ids(f"[{data_column}]='{treatment_a}'")
+        for j in range(i+1, len(treatments)):
+            treatment_b =  treatments[j]
+            b_ids = filter_map.get_ids(f"[{data_column}]='{treatment_b}'")
         print(treatment_a)
-        print(a_ids)
 
          
 # Signifcance test (PERMANOVA)
@@ -223,13 +235,7 @@ def beta_diversity(asv_table,
     # https://www.tutorialspoint.com/numpy/numpy_matplotlib.htm
     pcoa_results = pcoa_results.samples
 
-    # Preform signifcance test
-    # sig_results = signifcance_test(beta_diversity_table,
-    #                                pcoa_results,
-    #                                output,
-    #                                map_file,
-    #                                treatments,
-    #                                data_column)
+
 
     sig_results = signifcance_test_kruskal(beta_diversity_table,
                                    pcoa_results,
@@ -238,10 +244,18 @@ def beta_diversity(asv_table,
                                    treatments,
                                    data_column)
 
-    # Generate statsics
-    stats_generator(pcoa_results,
-                    output,
-                    sig_results)
+
+    # Preform signifcance test
+    #sig_results = signifcance_test(beta_diversity_table,
+    #                               pcoa_results,
+    #                               output,
+    #                               map_file,
+    #                               treatments,
+    #                               data_column)
+    ## Generate statsics
+    #stats_generator(pcoa_results,
+    #                output,
+    #                sig_results)
 
     # For testing purposes
     # qiime2_signifcance_test(beta_diversity_table,
