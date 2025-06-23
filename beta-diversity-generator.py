@@ -1,93 +1,65 @@
 import argparse
 from datetime import datetime
 import os
-from sre_compile import dis
-from skbio import OrdinationResults
-from skbio import DistanceMatrix
-from skbio.stats.distance import permanova, anosim, permdisp
-import scipy.stats as stats
-from qiime2.plugins import feature_table
-from qiime2.plugins import diversity
-from qiime2 import Metadata
-from qiime2 import Artifact
+from skbio import OrdinationResults, DistanceMatrix
+from skbio.stats.distance import permanova
+from qiime2.plugins import feature_table, diversity
+from qiime2 import Metadata, Artifact
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from collections import defaultdict
 
 
-def qiime2_signifcance_test(distance_matrix,
-                            metadata,
-                            data_column,
-                            output) -> None:
-    column = metadata.get_column(data_column)
-    permanova = diversity.visualizers.beta_group_significance(
-            distance_matrix=distance_matrix,
-            method='permanova',
-            metadata=column,
-            pairwise=True,
-            permutations=999)
-    permanova.visualization.save(f'{output}/signifcance_test.qzv')
-
-
-def signifcance_test_kruskal(distance_matrix,
-                     dataframe,
-                     output,
+def signifcance_test_non_pairwise(distance_matrix,
                      metadata,
-                     treatments,
                      data_column) -> pd.DataFrame:
+    # Create empty dictionary to store results
+    results_df = defaultdict(dict)
+
+
+
+    # Convert Distance Matrix Qiime2 object to skbio Distance Matrix Object
     distance_matrix = distance_matrix.view(DistanceMatrix)
 
-    #Extract sample ids from Distance Matrix
+    # Extract all sample ids in the current Distance Matrix
     all_ids = list(distance_matrix.ids)
-    print(all_ids)
 
-    #Convert Distance Matrix to dataframe
-    #distance_matrix = distance_matrix.to_data_frame()
 
-    # Create a DataFrame object from filltered DistanceMatrix object
+    # Create a DataFrame object from filltered Distance Matrix object
     dm_df = distance_matrix.to_data_frame()
     dm_df.index.names = ['IDs']
 
-    #Filter Map file to only include information about samples ids in the current distance martix
+    # Filter metadata file to only include information about samples ids in the current distance martix
     map_ids = metadata.get_column(f"{data_column}")
     map_ids = map_ids.filter_ids(all_ids)
     map_ids = map_ids.to_dataframe()
     map_ids.index.names = ['IDs']
 
-    # Merge to DataFrames to finish mapping IDs to treatments
+    # Merge to both DataFrame objects into one dataframe
     main_df = pd.merge(dm_df,
                         map_ids,
                         left_index=True,
                         right_index=True)
-    print(dm_df)
-    print(map_ids)
-    print(main_df)
+
     results = permanova(distance_matrix,
                     main_df,
                     column=data_column,
                     permutations=999)
-    print(results)
 
-    #print(distance_matrix)
-    """
-    Triple dictionary where [Treatment_a][a_id][Treatment_b][b_id] = {H value, P value} 
-    """
-    filter_map = metadata.filter_ids(all_ids)
-    for i, a_id in enumerate(treatments):
-        treatment_a = a_id
-        a_ids = filter_map.get_ids(f"[{data_column}]='{treatment_a}'")
-        print(treatment_a)
-        print(a_ids)
-        for j in range(i+1, len(treatments)):
-            treatment_b =  treatments[j]
-            b_ids = filter_map.get_ids(f"[{data_column}]='{treatment_b}'")
+    print(results)
+    results_df["Sample Size"] = results.get("sample size")
+    results_df["Permutations"] = results.get("number of permutations")
+    results_df["pseudo-F"] = round(results.get("test statistic"), 6)
+    results_df["p-value"] = round(results.get("p-value"), 3)
+
+    return pd.DataFrame.from_dict(results_df,
+                                  orient='index',
+                                  columns=['Results'])
+
 
          
-# Signifcance test (PERMANOVA)
-def signifcance_test(distance_matrix,
-                     dataframe,
-                     output,
+def signifcance_test_pairswise(distance_matrix,
                      metadata,
                      treatments,
                      data_column) -> pd.DataFrame:
@@ -95,71 +67,61 @@ def signifcance_test(distance_matrix,
     # Create empty dictionary to store results
     results_df = defaultdict(dict)
 
-    # Transform qiime2 Distance Matrix object to skbio
-    # DistanceMatrix object
+    # Convert Distance Matrix Qiime2 object to skbio Distance Matrix Object
     distance_matrix = distance_matrix.view(DistanceMatrix)
-    print('Generating signifcance test...')
 
+    # Extract all sample ids in the current Distance Matrix
     all_ids = distance_matrix.ids
 
-    print(all_ids)
-    print(type(all_ids))
     for i in range(len(treatments)):
         # Set ith treatment
         treatment_a = treatments[i]
 
-        print(f'treatment_a: {treatment_a}')
         # Get all samples from map file that relate to treatment_a
         a_ids = map_file.get_ids(f"[{data_column}]='{treatment_a}'")
-        print(f'a_ids: {a_ids}')
         for j in range(i+1, len(treatments)):
             # Set jth treatment
             treatment_b = treatments[j]
 
-            print(f'treatment_b: {treatment_b}')
             # Get all samples from map file that relate to treatment_b
             b_ids = map_file.get_ids(f"[{data_column}]='{treatment_b}'")
 
-            print(f'b_ids: {b_ids}')
-            # Union both b_ids and a_ids to get all samples
-            # to be compared against
+
+            # Filter list to only include samples in the current DistanceMatrix object
             temp_compare_ids = list(a_ids.union(b_ids))
 
-            print(f'compare_ids: {temp_compare_ids}')
-
-            # Comparing and updating the list will result in strange errors
-            # Better to store in a copy
             compare_ids = []
             for id in temp_compare_ids:
                 if id in all_ids:
                     compare_ids.append(id)
 
-            print(f'after removing all ids not in the distance martix object: {compare_ids}')
 
-            # Filter DistanceMatrix to contain all samples to be compared
-            # against
+            # Filter DistanceMatrix to contain all samples to be compared against (I.E A Vs B)
             filtered_dm = distance_matrix.filter(compare_ids)
+
             # Create a DataFrame object from filltered DistanceMatrix object
             dm_df = filtered_dm.to_data_frame()
             dm_df.index.names = ['IDs']
 
             # Create a DataFrame which maps IDs to treatments
-            map_ids = map_file.get_column(f"{data_column}")
+            map_ids = metadata.get_column(f"{data_column}")
             map_ids = map_ids.filter_ids(compare_ids)
             map_ids = map_ids.to_dataframe()
             map_ids.index.names = ['IDs']
+
+
             # Merge to DataFrames to finish mapping IDs to treatments
             main_df = pd.merge(dm_df,
                                map_ids,
                                left_index=True,
                                right_index=True)
-            print(f'{main_df}')
-            print(f'{filtered_dm}')
-            # Run PERMANOVA test against ith and jth treatments
-            results = anosim(filtered_dm,
+
+            results = permanova(filtered_dm,
                                 main_df,
                                 column=data_column,
-                                permutations=0)
+                                permutations=999)
+
+            # Map results to dictionary
             results_df[f"{treatment_a}"][f"{treatment_b}"] = {
                     "Sample size": results.get("sample size"),
                     "Permutations": results.get("number of permutations"),
@@ -227,6 +189,7 @@ def beta_diversity(asv_table,
                    data_column,
                    treatments,
                    plot_tilte,
+                   pairwise,
                    output) -> None:
 
     # Split treatments into list
@@ -262,34 +225,21 @@ def beta_diversity(asv_table,
     pcoa_results = pcoa_results.samples
 
 
-    
-    sig_results = signifcance_test_kruskal(beta_diversity_table,
-                                   pcoa_results,
-                                   output,
-                                   map_file,
-                                   treatments,
-                                   data_column)
-    
-
-    """     
-    # Preform signifcance test
-    sig_results = signifcance_test(beta_diversity_table,
-                                   pcoa_results,
-                                   output,
+   
+    if pairwise == True:
+        sig_results = signifcance_test_pairswise(beta_diversity_table,
                                    map_file,
                                    treatments,
                                    data_column) 
-    """
-    ## Generate statsics
-    #stats_generator(pcoa_results,
-    #                output,
-    #                sig_results)
+    else:
+        sig_results = signifcance_test_non_pairwise(beta_diversity_table,
+                                   map_file,
+                                   data_column)
 
-    # For testing purposes
-    # qiime2_signifcance_test(beta_diversity_table,
-    #                         map_file,
-    #                         data_column,
-    #                         output)
+    # Generate statsics
+    stats_generator(pcoa_results,
+                    output,
+                    sig_results)
 
     fig, ax = plt.subplots(figsize=(15, 10))
     cmap = plt.get_cmap('tab20')
@@ -365,6 +315,11 @@ if __name__ == '__main__':
                         help="Tilte for plot",
                         type=str)
 
+    parser.add_argument('-w',
+                        "--pairwise",
+                        type=bool,
+                        help="Set a preferred listing for x axis (Default is nothing)")
+
     parser.add_argument('-l',
                         "--listing",
                         nargs='+',
@@ -386,6 +341,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     data_file = args.input_file
     map_file = args.map_file
+    pairwise = args.pairwise
     data_column = args.column
     plot_tilte = args.plot_title
     treatments = args.listing
@@ -395,7 +351,14 @@ if __name__ == '__main__':
     if ((asv_table := validate_data(data_file)) is not None) and ((map_file := Metadata.load(map_file)) is not None):
         if not os.path.exists(output):
             os.mkdir(output)
-        beta_diversity(asv_table, map_file, data_column, treatments, plot_tilte, output)
+
+        beta_diversity(asv_table,
+                       map_file,
+                       data_column,
+                       treatments,
+                       plot_tilte,
+                       pairwise,
+                       output)
     else:
         print('Invalid data type or map file')
         exit(1)
