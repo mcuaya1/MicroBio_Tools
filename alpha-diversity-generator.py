@@ -18,16 +18,17 @@ def signifcance_test(dataframe, outputdir):
     #https://stackoverflow.com/questions/15943769/how-do-i-get-the-row-count-of-a-pandas-dataframe 
     n = dataframe[dataframe.columns[0]].count()
     dataframe_list=[]
-
     #Here we just find the statsical signifcance between treatments 
     #The algorithm isn't the most efficent as it is O(n^2) but if we add parallization then we 
     #can probably reduce the time spent calculating when using larger datasets
     for i in range(n-1):
         current_treatment = dataframe.iloc[i].item()
+        print(f'curr={current_treatment}')
         current_treatment_name = dataframe.index[i]
         grouping=[]
         for j in range(i+1, n):
             jth_treatment = dataframe.iloc[j].item()
+            print(f'jth={jth_treatment}')
             jth_treatment_name = dataframe.index[j]
             kruskal_test= stats.kruskal(current_treatment, jth_treatment)
             grouping.append((jth_treatment_name,kruskal_test[0][1], kruskal_test[1][1]))
@@ -39,6 +40,7 @@ def signifcance_test(dataframe, outputdir):
     
     #Concate each dataframe from the data frame list by columns
     signifcance_table=pd.concat(dataframe_list, axis=0, join='outer')
+    print(signifcance_table)
     return signifcance_table
 
 def visualizer(dataframe, plot_title, outputdir):

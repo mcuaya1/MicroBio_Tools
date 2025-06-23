@@ -48,24 +48,32 @@ def correlation_analysis(map_file,
     asv_label_formatter(new_lables)
     top_n.columns = new_lables
 
-    # Extract Exp and values
-    samples = map_file.get_column(f"{corr_col_0}").drop_missing_values().to_dataframe()
-    sample_vals = map_file.get_column(f"{corr_col_1}").drop_missing_values().to_dataframe()
-    corr_map = samples.merge(sample_vals,
+
+    # Extract all correlation columns into a list
+    corr_cols = corr_col_1.split(",")
+    
+    # Extract corrleation samples
+    corr_map = map_file.get_column(f"{corr_col_0}").drop_missing_values().to_dataframe()
+    print(corr_map)
+    sample_names = corr_map.index.to_list()
+    # Merge all corrleation values with correlation samples
+    for i, corr_col in enumerate(corr_cols):
+        sample_vals = map_file.get_column(f"{corr_col}").to_dataframe().fillna(0)
+    
+        corr_map = corr_map.merge(sample_vals,
                              left_index=True,
                              right_index=True)
+        corr_map[f'{corr_col}'] = pd.to_numeric(corr_map[f"{corr_col}"],
+                             errors='coerce')
     corr_map = corr_map.set_index(f'{corr_col_0}')
 
-    # Remove _exp tag from sample names
+    # Remove _Exp tag from sample names
     sample_names = corr_map.index.to_list()
     for i in range(len(sample_names)):
-        sample_names[i] = sample_names[i].split('_')[0]
+        sample_names[i] = sample_names[i].split('_Exp')[0]
 
     corr_map.index = sample_names
     corr_map.index.name = 'Samples'
-    corr_map = pd.to_numeric(corr_map[f"{corr_col_1}"],
-                             errors='coerce')
-
     # Group samples by name and get the mean
     corr_map = corr_map.groupby(corr_map.index).mean()
     samples_ids = samples_ids.split(',')
@@ -75,20 +83,30 @@ def correlation_analysis(map_file,
                           left_index=True,
                           right_index=True,
                           how='left')
-    fig, ax = plt.subplots(figsize=(15, 10))
 
-    print(merged_map)
-    for i in range(len(new_lables)):
-        ax.scatter(merged_map[new_lables[i]],
-                   merged_map[f"{corr_col_1}"],
-                   label=f"{new_lables[i]}")
+    print(corr_map)
+    for col in corr_cols:
+        fig, ax = plt.subplots(figsize=(15, 10))
+        for i in range(len(new_lables)):
+            ax.scatter(merged_map[new_lables[i]],
+                       merged_map[f"{col}"],
+                       label=f"{new_lables[i]}")
 
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax.legend()
-    fig.tight_layout()
-    plt.grid(True)
-    fig.savefig(f"{output}corrleation_graph.png")
+        plt.ylabel(f"{col.replace('_',' ')}", fontsize='15')
+        plt.xlabel(f'ASV Abundance', fontsize='15')
+
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        handles, labels = plt.gca().get_legend_handles_labels()
+        ax.legend(handles,
+                  labels,
+                  bbox_to_anchor=(1, 1),
+                  frameon=False,
+                  title="ASV",
+                  alignment='left')
+        fig.tight_layout()
+        plt.grid(True)
+        fig.savefig(f"{output}{col}_corrleation_graph.png")
 
 
 def validate_data(asv_table):
