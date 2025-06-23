@@ -47,12 +47,13 @@ def signifcance_test_non_pairwise(distance_matrix,
                     column=data_column,
                     permutations=999)
 
-    print(results)
-    results_df["Sample Size"] = results.get("sample size")
-    results_df["Permutations"] = results.get("number of permutations")
+    results_df["Sample Size"] = int(results.get("sample size"))
+    results_df["Permutations"] = int(results.get("number of permutations"))
     results_df["pseudo-F"] = round(results.get("test statistic"), 6)
     results_df["p-value"] = round(results.get("p-value"), 3)
 
+
+    print(results_df)
     return pd.DataFrame.from_dict(results_df,
                                   orient='index',
                                   columns=['Results'])
@@ -317,7 +318,8 @@ if __name__ == '__main__':
 
     parser.add_argument('-w',
                         "--pairwise",
-                        type=bool,
+                        default=False,
+                        action=argparse.BooleanOptionalAction,
                         help="Set a preferred listing for x axis (Default is nothing)")
 
     parser.add_argument('-l',
