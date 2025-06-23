@@ -12,9 +12,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from collections import defaultdict
+import re
 
 
-def qiime2_signifcance_test(distance_matrix,
+def qiime2_significance_test(distance_matrix,
                             metadata,
                             data_column,
                             output) -> None:
@@ -25,11 +26,11 @@ def qiime2_signifcance_test(distance_matrix,
             metadata=column,
             pairwise=True,
             permutations=999)
-    permanova.visualization.save(f'{output}/signifcance_test.qzv')
+    permanova.visualization.save(f'{output}/significance_test.qzv')
 
 
 # Signifcance test (PERMANOVA)
-def signifcance_test(distance_matrix,
+def significance_test(distance_matrix,
                      dataframe,
                      output,
                      metadata,
@@ -42,7 +43,7 @@ def signifcance_test(distance_matrix,
     # Transform qiime2 Distance Matrix object to skbio
     # DistanceMatrix object
     distance_matrix = distance_matrix.view(DistanceMatrix)
-    print('Generating signifcance test...')
+    print('Generating significance test...')
 
     all_ids = distance_matrix.ids
 
@@ -116,7 +117,7 @@ def stats_generator(stats,
     # Generate excel file filed with distance points/sig test
     print('Generating excel file...')
     dists_pts.to_excel(f'{output}beta_diversity_stats.xlsx')
-    sig_results.to_excel(f'{output}signifcance_test_results.xlsx')
+    sig_results.to_excel(f'{output}significance_test_results.xlsx')
 
     # Generate markdown file
     print('Generating markdown file with table stats...')
@@ -190,8 +191,8 @@ def beta_diversity(asv_table,
     # https://www.tutorialspoint.com/numpy/numpy_matplotlib.htm
     pcoa_results = pcoa_results.samples
 
-    # Preform signifcance test
-    sig_results = signifcance_test(beta_diversity_table,
+    # Preform significance test
+    sig_results = significance_test(beta_diversity_table,
                                    pcoa_results,
                                    output,
                                    map_file,
@@ -204,25 +205,47 @@ def beta_diversity(asv_table,
                     sig_results)
 
     # For testing purposes
-    # qiime2_signifcance_test(beta_diversity_table,
+    # qiime2_significance_test(beta_diversity_table,
     #                         map_file,
     #                         data_column,
     #                         output)
 
     fig, ax = plt.subplots(figsize=(15, 10))
-    cmap = plt.get_cmap('tab20')
 
     # Generate and assign color mapping
-    colors = [cmap(i) for i in np.linspace(0, 1, len(treatments))]
     mapping = {}
-    for i in range(len(colors)):
-        mapping[treatments[i]] = colors[i]
+    for i in range(len(treatments)):
+        match = re.search(r'Tm(\d+)', treatments[i])
+
+        if not match:
+            raise ValueError(f"Treatment name invalid: {treatments[i]}")
+    
+        Tm = int(match.group(1))
+        if Tm == 0:
+            mapping[treatments[i]] = 'blue'
+        elif Tm == 154:
+            mapping[treatments[i]] = 'orange'
+
     column = map_file.get_column(data_column)
 
     # Generate Scatter plot
     for row in pcoa_results.itertuples():
         label = column.get_value(row.Index)
-        ax.scatter(row[1], row[2], color=mapping[label], label=label)
+
+        markers = [".", "o", "^", "s", "p", "P", "*", "H", "X", "D"]
+        marker = re.search(r'T(\d+)', label)
+        if not marker:
+            raise ValueError(f"Label name invalid: {label}")
+        marker = int(marker.group(1))
+        ax.scatter(
+            row[1],
+            row[2],
+            color=mapping[label],
+            label=label,
+            marker=markers[marker % len(markers)],
+            s=150,
+            zorder=2,
+        )
 
     # Calculate distance axis
     plt.ylabel(f'Axis 2 [{(eigen_values[1]/total_eigen_values):.2%}]', fontsize='15')
@@ -232,11 +255,16 @@ def beta_diversity(asv_table,
     # https://stackoverflow.com/questions/13588920/stop-matplotlib-repeating-labels-in-legend
     handles, labels = plt.gca().get_legend_handles_labels()
     uniques = dict(zip(labels, handles))
+    # maintain order of treatments in legend
+    uniques = {k: uniques[k] for k in treatments if k in uniques}
+
     ax.legend(uniques.values(),
               uniques.keys(),
               bbox_to_anchor=(1, 1),
               frameon=False,
               title="Treatments",
+              fontsize='15',
+              title_fontsize='20',
               loc='upper left')
 
     # Save plot
@@ -245,7 +273,7 @@ def beta_diversity(asv_table,
     ax.spines['right'].set_visible(False)
     fig.tight_layout()
     plt.grid(True)
-    fig.savefig(f"{output}beta_diversity.png")
+    fig.savefig(f"{output}beta_diversity.png", dpi=300)
 
 
 def validate_data(asv_table) -> None:
