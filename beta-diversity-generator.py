@@ -5,6 +5,7 @@ from sre_compile import dis
 from skbio import OrdinationResults
 from skbio import DistanceMatrix
 from skbio.stats.distance import permanova, anosim, permdisp
+import scipy.stats as stats
 from qiime2.plugins import feature_table
 from qiime2.plugins import diversity
 from qiime2 import Metadata
@@ -13,7 +14,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from collections import defaultdict
-from rpy2.robjects.packages import importr
 
 
 def qiime2_signifcance_test(distance_matrix,
@@ -39,24 +39,49 @@ def signifcance_test_kruskal(distance_matrix,
     distance_matrix = distance_matrix.view(DistanceMatrix)
 
     #Extract sample ids from Distance Matrix
-    all_ids = distance_matrix.ids
+    all_ids = list(distance_matrix.ids)
+    print(all_ids)
 
     #Convert Distance Matrix to dataframe
-    distance_matrix = distance_matrix.to_data_frame()
+    #distance_matrix = distance_matrix.to_data_frame()
+
+    # Create a DataFrame object from filltered DistanceMatrix object
+    dm_df = distance_matrix.to_data_frame()
+    dm_df.index.names = ['IDs']
 
     #Filter Map file to only include information about samples ids in the current distance martix
-    filter_map = map_file.filter_ids(all_ids)
+    map_ids = metadata.get_column(f"{data_column}")
+    map_ids = map_ids.filter_ids(all_ids)
+    map_ids = map_ids.to_dataframe()
+    map_ids.index.names = ['IDs']
 
+    # Merge to DataFrames to finish mapping IDs to treatments
+    main_df = pd.merge(dm_df,
+                        map_ids,
+                        left_index=True,
+                        right_index=True)
+    print(dm_df)
+    print(map_ids)
+    print(main_df)
+    results = permanova(distance_matrix,
+                    main_df,
+                    column=data_column,
+                    permutations=999)
+    print(results)
+
+    #print(distance_matrix)
     """
     Triple dictionary where [Treatment_a][a_id][Treatment_b][b_id] = {H value, P value} 
     """
+    filter_map = metadata.filter_ids(all_ids)
     for i, a_id in enumerate(treatments):
         treatment_a = a_id
         a_ids = filter_map.get_ids(f"[{data_column}]='{treatment_a}'")
+        print(treatment_a)
+        print(a_ids)
         for j in range(i+1, len(treatments)):
             treatment_b =  treatments[j]
             b_ids = filter_map.get_ids(f"[{data_column}]='{treatment_b}'")
-        print(treatment_a)
 
          
 # Signifcance test (PERMANOVA)
@@ -131,9 +156,10 @@ def signifcance_test(distance_matrix,
             print(f'{main_df}')
             print(f'{filtered_dm}')
             # Run PERMANOVA test against ith and jth treatments
-            results = permanova(filtered_dm,
+            results = anosim(filtered_dm,
                                 main_df,
-                                column=data_column)
+                                column=data_column,
+                                permutations=0)
             results_df[f"{treatment_a}"][f"{treatment_b}"] = {
                     "Sample size": results.get("sample size"),
                     "Permutations": results.get("number of permutations"),
@@ -236,22 +262,24 @@ def beta_diversity(asv_table,
     pcoa_results = pcoa_results.samples
 
 
-
+    
     sig_results = signifcance_test_kruskal(beta_diversity_table,
                                    pcoa_results,
                                    output,
                                    map_file,
                                    treatments,
                                    data_column)
+    
 
-
+    """     
     # Preform signifcance test
-    #sig_results = signifcance_test(beta_diversity_table,
-    #                               pcoa_results,
-    #                               output,
-    #                               map_file,
-    #                               treatments,
-    #                               data_column)
+    sig_results = signifcance_test(beta_diversity_table,
+                                   pcoa_results,
+                                   output,
+                                   map_file,
+                                   treatments,
+                                   data_column) 
+    """
     ## Generate statsics
     #stats_generator(pcoa_results,
     #                output,
