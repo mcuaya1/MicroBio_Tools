@@ -8,6 +8,14 @@ from scipy import stats
 from qiime2 import Metadata
 from qiime2 import Artifact
 
+def validate_data(asv_table):
+    if '.qza' in asv_table:
+        asv_table = Artifact.load(asv_table)
+        return asv_table
+
+    return None
+
+
 #To clean up asv labels
 def asv_label_formatter(asv_list):
     for i in range(len(asv_list)):
@@ -31,99 +39,98 @@ def asv_label_formatter(asv_list):
         else:
             asv_list[i]=asv_list[i].split(';')[-1]
 
-def correlation_analysis(map_file,
+
+def correlation_analysis(data_file,
+                         map_file,
                          corr_col_0,
                          corr_col_1,
-                         samples_ids,
+                         treatments,
                          plot_title,
-                         top_tax_file,
-                         output_dir) -> None:
+                         taxa_file,
+                         output):
 
+    treatments = treatments.split(',')
+    correlation_cols = corr_col_1.split(',') 
+
+    # Map sample IDs to treatments specified
+    sample_mapping = map_file.get_column(corr_col_0).drop_missing_values().to_dataframe()
+
+    sample_mapping = sample_mapping.reset_index()
+
+    sample_mapping = sample_mapping.set_index(f'{corr_col_0}')
+
+
+    sample_mapping = sample_mapping[sample_mapping.index.isin(treatments)]
+
+
+    # Map Correlation values to IDs
+    sample_ids = sample_mapping['#SampleID'].to_list()
+    correlation_mapping = map_file.to_dataframe()[correlation_cols]
+    correlation_mapping = correlation_mapping[correlation_mapping.index.isin(sample_ids)]
+    
+
+    # Merging mappings
+    merged_mapping = pd.merge(sample_mapping,
+                      correlation_mapping,
+                      right_index=True,
+                      left_on=["#SampleID"])
+
+    print(merged_mapping)
+    asv_table = data_file.view(pd.DataFrame)
+    
     # Extract top n asvs from csv file
-    top_n = pd.read_excel(f"{top_tax_file}")
+    top_n = pd.read_excel(f"{taxa_file}")
     top_n = top_n.rename(columns={'Unnamed: 0': 'Treatments'})
     top_n = top_n.set_index('Treatments')
-    new_lables = top_n.columns.to_list()
+    top_n_list = top_n.columns.to_list()
+
+    asv_table = asv_table[top_n_list[:len(top_n_list)-1]]
+    asv_table = asv_table[asv_table.index.isin(sample_ids)]
+
+
+    merged_mapping = pd.merge(merged_mapping,
+                              asv_table,
+                              right_index=True,
+                              left_on=["#SampleID"])
+
+    # Drop SampleIDs from DataFrame and merge treatments by mean of correlation values
+    merged_mapping = merged_mapping.drop(columns=['#SampleID'])
+    corr_dataframe = merged_mapping[correlation_cols].astype(float)
+    corr_dataframe = corr_dataframe.groupby(level=0).mean()
+
+
+    # Drop correlation columns from DataFrame and merge treatments by sum of taxanomic abundance
+    taxa_dataframe = merged_mapping.drop(columns=correlation_cols)
+    taxa_dataframe = taxa_dataframe.astype(int).groupby(level=0).sum()
+
+    # Normalize taxa DataFrame
+    treatment_total = taxa_dataframe[taxa_dataframe.columns].sum(axis=1)
+    taxa_dataframe = taxa_dataframe.div(treatment_total,
+                                        axis=0)
+
+    new_lables = taxa_dataframe.columns.to_list()
     
     asv_label_formatter(new_lables)
-    top_n.columns = new_lables
-
-
-    # Extract all correlation columns into a list
-    corr_cols = corr_col_1.split(",")
-    print(corr_cols)
+    taxa_dataframe.columns = new_lables
     
-    # Extract corrleation samples
-    corr_map = map_file.get_column(f"{corr_col_0}").drop_missing_values().to_dataframe()
-    print(corr_map)
-    sample_names = corr_map.index.to_list()
-    # Merge all corrleation values with correlation samples
-    for i, corr_col in enumerate(corr_cols):
-        sample_vals = map_file.get_column(f"{corr_col}").to_dataframe().fillna(0)
-        corr_map = corr_map.merge(sample_vals,
-                             left_index=True,
-                             right_index=True)
-        corr_map[f'{corr_col}'] = pd.to_numeric(corr_map[f"{corr_col}"],
-                             errors='coerce')
-    corr_map = corr_map.set_index(f'{corr_col_0}')
-    # Remove _Exp tag from sample names
-    sample_names = corr_map.index.to_list()
-    for i in range(len(sample_names)):
-        sample_names[i] = sample_names[i].split('_Exp')[0]
+    # Merge two DataFrames back together
+    merged_mapping = pd.merge(corr_dataframe,
+                              taxa_dataframe,
+                              right_index=True,
+                              left_index=True)
 
-    corr_map.index = sample_names
-    corr_map.index.name = 'Samples'
-
-    # Group samples by name and get the mean
-    corr_map = corr_map.groupby(corr_map.index).mean()
-
-
-    # Filter both the top n taxa DataFrame and Correlation DataFrame to include only samples listed to be correlated
-    samples_ids = samples_ids.split(',')
-    corr_map = corr_map[corr_map.index.isin(samples_ids)]
-    top_n = top_n[top_n.index.isin(samples_ids)]
-    merged_map = pd.merge(top_n,
-                          corr_map,
-                          left_index=True,
-                          right_index=True,
-                          how='left')
-
-    print(merged_map)
-
-    results = stats.spearmanr(merged_map['g__Streptomyces'].to_list(),
-                              merged_map['CALIPER_CORRELATION'].to_list())
-    print(results)
-    exit(1)
-    for col in corr_cols:
-        fig, ax = plt.subplots(figsize=(15, 10))
-        for i in range(len(new_lables)):
-            ax.scatter(merged_map[new_lables[i]],
-                       merged_map[f"{col}"],
-                       label=f"{new_lables[i]}")
-
-        plt.ylabel(f"{col.replace('_',' ')}", fontsize='15')
-        plt.xlabel(f'ASV Abundance', fontsize='15')
-
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        handles, labels = plt.gca().get_legend_handles_labels()
-        ax.legend(handles,
-                  labels,
-                  bbox_to_anchor=(1, 1),
-                  frameon=False,
-                  title="ASV",
-                  alignment='left')
-        fig.tight_layout()
-        plt.grid(True)
-        fig.savefig(f"{output}{col}_corrleation_graph.png")
-
-
-def validate_data(asv_table):
-    if '.qza' in asv_table:
-        asv_table = Artifact.load(asv_table)
-        return asv_table
-
-    return None
+    results = {}
+    for corr_col in corr_dataframe.columns.to_list():
+        curr_col = corr_col
+        results[corr_col] = {} 
+        for taxa in taxa_dataframe.columns.to_list():
+            spearman = stats.spearmanr(taxa_dataframe[taxa].to_list(),
+                                                      corr_dataframe[curr_col].to_list())
+            results[corr_col][taxa] = f'Statistic: {round(spearman[0], 6)}, pvalue: {round(spearman[-1], 3)}' 
+    final_dataframe = pd.DataFrame.from_dict(results,
+                                  orient='index')
+    final_dataframe = final_dataframe.T
+    print(final_dataframe)
 
 
 if __name__ == '__main__':
@@ -161,15 +168,15 @@ if __name__ == '__main__':
                         "--plot-title",
                         help="Tilte for plot",
                         type=str)
-    parser.add_argument('-d',
-                        "--output-dir",
-                        required=True,
-                        help="Output directory location",
-                        type=str)
     parser.add_argument('-t',
                         "--taxa-file",
                         required=True,
                         help="Top N taxa file location",
+                        type=str)
+    parser.add_argument('-d',
+                        "--output-dir",
+                        required=True,
+                        help="Output directory location",
                         type=str)
     parser.add_argument('-h',
                         '--help',
@@ -190,7 +197,8 @@ if __name__ == '__main__':
     if ((asv_table := validate_data(data_file))) and ((map_file := Metadata.load(map_file))):
         if not os.path.exists(output):
             os.mkdir(output)
-        correlation_analysis(map_file,
+        correlation_analysis(asv_table,
+                             map_file,
                              corr_col_0,
                              corr_col_1,
                              samples,
