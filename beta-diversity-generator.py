@@ -9,9 +9,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from collections import defaultdict
+import re
 
 
-def signifcance_test_non_pairwise(distance_matrix,
+def significance_test_non_pairwise(distance_matrix,
                      metadata,
                      data_column) -> pd.DataFrame:
     # Create empty dictionary to store results
@@ -60,7 +61,7 @@ def signifcance_test_non_pairwise(distance_matrix,
 
 
          
-def signifcance_test_pairswise(distance_matrix,
+def significance_test_pairswise(distance_matrix,
                      metadata,
                      treatments,
                      data_column) -> pd.DataFrame:
@@ -150,7 +151,7 @@ def stats_generator(stats,
     # Generate excel file filed with distance points/sig test
     print('Generating excel file...')
     dists_pts.to_excel(f'{output}beta_diversity_stats.xlsx')
-    sig_results.to_excel(f'{output}signifcance_test_results.xlsx')
+    sig_results.to_excel(f'{output}significance_test_results.xlsx')
 
     # Generate markdown file
     print('Generating markdown file with table stats...')
@@ -224,16 +225,14 @@ def beta_diversity(asv_table,
     # https://medium.com/@conniezhou678/applied-machine-learning-part-12-principal-coordinate-analysis-pcoa-in-python-5acc2a3afe2d
     # https://www.tutorialspoint.com/numpy/numpy_matplotlib.htm
     pcoa_results = pcoa_results.samples
-
-
    
     if pairwise == True:
-        sig_results = signifcance_test_pairswise(beta_diversity_table,
+        sig_results = significance_test_pairswise(beta_diversity_table,
                                    map_file,
                                    treatments,
                                    data_column) 
     else:
-        sig_results = signifcance_test_non_pairwise(beta_diversity_table,
+        sig_results = significance_test_non_pairwise(beta_diversity_table,
                                    map_file,
                                    data_column)
 
@@ -243,19 +242,41 @@ def beta_diversity(asv_table,
                     sig_results)
 
     fig, ax = plt.subplots(figsize=(15, 10))
-    cmap = plt.get_cmap('tab20')
 
     # Generate and assign color mapping
-    colors = [cmap(i) for i in np.linspace(0, 1, len(treatments))]
     mapping = {}
-    for i in range(len(colors)):
-        mapping[treatments[i]] = colors[i]
+    for i in range(len(treatments)):
+        match = re.search(r'Tm(\d+)', treatments[i])
+
+        if not match:
+            raise ValueError(f"Treatment name invalid: {treatments[i]}")
+    
+        Tm = int(match.group(1))
+        if Tm == 0:
+            mapping[treatments[i]] = 'blue'
+        elif Tm == 154:
+            mapping[treatments[i]] = 'orange'
+
     column = map_file.get_column(data_column)
 
     # Generate Scatter plot
     for row in pcoa_results.itertuples():
         label = column.get_value(row.Index)
-        ax.scatter(row[1], row[2], color=mapping[label], label=label)
+
+        markers = [".", "o", "^", "s", "p", "P", "*", "H", "X", "D"]
+        marker = re.search(r'T(\d+)', label)
+        if not marker:
+            raise ValueError(f"Label name invalid: {label}")
+        marker = int(marker.group(1))
+        ax.scatter(
+            row[1],
+            row[2],
+            color=mapping[label],
+            label=label,
+            marker=markers[marker % len(markers)],
+            s=150,
+            zorder=2,
+        )
 
     # Calculate distance axis
     plt.ylabel(f'Axis 2 [{(eigen_values[1]/total_eigen_values):.2%}]', fontsize='15')
@@ -265,11 +286,16 @@ def beta_diversity(asv_table,
     # https://stackoverflow.com/questions/13588920/stop-matplotlib-repeating-labels-in-legend
     handles, labels = plt.gca().get_legend_handles_labels()
     uniques = dict(zip(labels, handles))
+    # maintain order of treatments in legend
+    uniques = {k: uniques[k] for k in treatments if k in uniques}
+
     ax.legend(uniques.values(),
               uniques.keys(),
               bbox_to_anchor=(1, 1),
               frameon=False,
               title="Treatments",
+              fontsize='15',
+              title_fontsize='20',
               loc='upper left')
 
     # Save plot
@@ -278,7 +304,7 @@ def beta_diversity(asv_table,
     ax.spines['right'].set_visible(False)
     fig.tight_layout()
     plt.grid(True)
-    fig.savefig(f"{output}beta_diversity.png")
+    fig.savefig(f"{output}beta_diversity.png", dpi=300)
 
 
 def validate_data(asv_table) -> None:
