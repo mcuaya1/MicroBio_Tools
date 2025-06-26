@@ -1,14 +1,15 @@
 import argparse
-from datetime import datetime
+import json
 import os
-from qiime2 import Metadata
-from qiime2 import Artifact
+from datetime import datetime
+
+import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
+import numpy as np
+import pandas as pd
+from qiime2 import Artifact, Metadata
 from qiime2.plugins import feature_table
 from qiime2.plugins.taxa.visualizers import barplot
-import matplotlib.ticker as ticker
-import matplotlib.pyplot as plt
-import numpy as np 
-import pandas as pd
 
 
 #To clean up asv labels
@@ -34,6 +35,37 @@ def asv_label_formatter(asv_list):
         else:
             asv_list[i]=asv_list[i].split(';')[-1]
 
+def load_or_create_color_map(headers, outputdir):
+    color_file = os.path.join(outputdir, 'color_map.json')
+
+    color_map = {}
+    if os.path.exists(color_file):
+        print("Loading existing color map...")
+        with open(color_file, 'r') as f:
+            color_map = json.load(f)
+
+    cmap = plt.get_cmap('tab20')
+    all_colors = [cmap(i) for i in range(cmap.N)]
+
+    color_index = len(color_map)
+
+    for taxon in headers:
+        if taxon not in color_map:
+            if color_index >= len(all_colors):
+                print(f"Warning: Not enough colors for all taxons, reusing colors")
+                color_index = color_index % len(all_colors)
+
+            color_map[taxon] = all_colors[color_index]
+            color_index += 1
+
+    with open(color_file, 'w') as f:
+        json.dump(color_map, f, indent=None, separators=(',', ':'))
+
+    print("Color map loaded successfully")
+
+    return color_map
+        
+    
 
 def visualizer(top_taxa_table, plot_title, outputdir):
     treatment_total=top_taxa_table[top_taxa_table.columns].sum(axis=1)
@@ -59,8 +91,8 @@ def visualizer(top_taxa_table, plot_title, outputdir):
     #Generating color map for bar plot
     #https://stackoverflow.com/questions/16006572/plotting-different-colors-in-matplotlib
     
-    cmap = plt.get_cmap('tab20')
-    colors = [cmap(i) for i in np.linspace(0, 1, len(headers))]
+    color_map = load_or_create_color_map(headers, outputdir)
+    colors = [color_map[taxon] for taxon in headers]
     
     #Plot the "Other" column first.
     ax.bar(top_taxa_table.index, top_taxa_table["Other"], bottom=0, width=0.9, color='black', alpha=0.77, label='Other')
@@ -99,7 +131,7 @@ def visualizer(top_taxa_table, plot_title, outputdir):
     ax.spines['right'].set_visible(False)
     fig.tight_layout()
     print("Saving visualization...")
-    fig.savefig(f'{outputdir}{plot_title}.png')
+    fig.savefig(f'{outputdir}{plot_title}.png', dpi=300)
 
 def stats_generator(asv_table: pd.DataFrame, outputdir: str, method:str, raw_asv_strings: list):
     time_generated=datetime.now().strftime("%d/%m/%y %H:%M:%S")

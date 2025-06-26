@@ -1,20 +1,21 @@
-#Python imports
+# Python imports
 import argparse
-from datetime import datetime
-import pandas as pd
-import matplotlib.pyplot as plt
+import json
 import os
+from datetime import datetime
+import re
+
+import matplotlib.pyplot as plt
+import pandas as pd
 import scipy.stats as stats
+from qiime2 import Artifact, Metadata
 
-#Qiime2 imports
-from qiime2.plugins import feature_table
-from qiime2.plugins import diversity
-from qiime2 import Metadata
-from qiime2 import Artifact
+# Qiime2 imports
+from qiime2.plugins import diversity, feature_table
 
 
 
-def signifcance_test(dataframe, outputdir):
+def significance(dataframe, outputdir):
     #https://stackoverflow.com/questions/15943769/how-do-i-get-the-row-count-of-a-pandas-dataframe 
     n = dataframe[dataframe.columns[0]].count()
     dataframe_list=[]
@@ -43,19 +44,69 @@ def signifcance_test(dataframe, outputdir):
     print(signifcance_table)
     return signifcance_table
 
+def load_or_create_color_map(headers, outputdir):
+    color_file = os.path.join(outputdir, 'color_map.json')
+
+    color_map = {}
+    if os.path.exists(color_file):
+        print("Loading existing color map...")
+        with open(color_file, 'r') as f:
+            color_map = json.load(f)
+
+    cmap = plt.get_cmap('tab20')
+    all_colors = [cmap(i) for i in range(cmap.N)]
+
+    color_index = len(color_map)
+
+    for taxon in headers:
+        if taxon not in color_map:
+            if color_index >= len(all_colors):
+                print(f"Warning: Not enough colors for all taxons, reusing colors")
+                color_index = color_index % len(all_colors)
+
+            color_map[taxon] = all_colors[color_index]
+            color_index += 1
+
+    with open(color_file, 'w') as f:
+        json.dump(color_map, f, indent=None, separators=(',', ':'))
+
+    print("Color map loaded successfully")
+
+    return color_map
+
 def visualizer(dataframe, plot_title, outputdir):
     cmap = plt.get_cmap('tab20')
     fig, ax = plt.subplots(figsize = (15, 10))
     medianprops = dict(linestyle='-', linewidth=1.5, color='black')
-    flierprops = dict(marker='o', markerfacecolor='blue', markersize=7,markeredgecolor='none')
-    boxprops = dict(facecolor=cmap(0.09))
    
     data = dataframe.drop(columns=['labeled-scores'])
-    plt.boxplot(data['raw-scores'],
-                labels=data.index,
-                patch_artist=True, 
-                boxprops=boxprops, medianprops=medianprops, flierprops=flierprops, 
-                widths=0.7)
+
+    types = [match.group(1) for s in data.index if (match := re.search(r'^(T\d+)', s))]
+    color_map = load_or_create_color_map(types, outputdir)
+
+    for i, row in enumerate(data.iterrows()):
+        scores = row[1]['raw-scores']
+
+        color_key = re.search(r'^(T\d+)', row[0])
+        if not color_key:
+            print(f"Warning: No color key found for {row[0]}")
+            continue
+        color = color_map[color_key.group(1)]
+
+        hatch = '//' if 'm154' in row[0] else ''
+
+        boxprops = dict(facecolor=color, hatch=hatch)
+        flierprops = dict(marker='o',
+                          markerfacecolor=color,
+                          markersize=8)
+        plt.boxplot(scores,
+                    labels=[row[0]],
+                    positions=[i],
+                    patch_artist=True,
+                    boxprops=boxprops,
+                    medianprops=medianprops,
+                    flierprops=flierprops,
+                    widths=0.7)
 
     plt.xticks(rotation=90,fontsize='13')
     plt.yticks(fontsize='13')
@@ -68,13 +119,13 @@ def visualizer(dataframe, plot_title, outputdir):
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     plt.tight_layout()
-    fig.savefig(f"{output}alpha_plot.png")
+    fig.savefig(f"{output}alpha_plot.png", dpi=300)
 
 def stats_generator(stats, outputdir):
     
     dataframe = stats.drop(columns=['raw-scores'])
 
-    datatframe_stats = signifcance_test(dataframe, outputdir) 
+    datatframe_stats = significance(dataframe, outputdir) 
     #Saving them to an execel file
     print('Generating excel file...')
     dataframe.to_excel(f'{output}alpha_diversity_stats.xlsx')
