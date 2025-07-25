@@ -54,7 +54,6 @@ def significance_test_non_pairwise(distance_matrix,
     results_df["p-value"] = round(results.get("p-value"), 3)
 
 
-    print(results_df)
     return pd.DataFrame.from_dict(results_df,
                                   orient='index',
                                   columns=['Results'])
